@@ -36,6 +36,7 @@ import {
   GitCompare,
   X,
   ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { useGearStore } from '@/store/useGearStore';
 import { CELESTIAL_PERIODS, type CandidateScheme } from '@/types';
@@ -53,6 +54,7 @@ export default function ReverseSearchPanel() {
   const applyCandidateScheme = useGearStore((s) => s.applyCandidateScheme);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmCandidate, setConfirmCandidate] = useState<CandidateScheme | null>(null);
 
   const targetRatio = useMemo(() => {
     return targetPeriodToRatio(reverseSearch.params.targetPeriodDays, reverseSearch.params.driverSpeedRpm);
@@ -75,23 +77,24 @@ export default function ReverseSearchPanel() {
   };
 
   return (
-    <Modal
-      opened={reverseSearch.isOpen}
-      onClose={() => setReverseSearchOpen(false)}
-      title={
-        <Group gap={8}>
-          <Wand2 size={20} style={{ color: 'var(--color-copper)' }} />
-          <Text size="sm" fw={700} style={{ fontFamily: 'var(--font-display)', letterSpacing: 1 }}>
-            天球目标反推排齿
-          </Text>
-        </Group>
-      }
-      size="xl"
-      centered
-      styles={{
-        body: { padding: 0 },
-      }}
-    >
+    <>
+      <Modal
+        opened={reverseSearch.isOpen}
+        onClose={() => setReverseSearchOpen(false)}
+        title={
+          <Group gap={8}>
+            <Wand2 size={20} style={{ color: 'var(--color-copper)' }} />
+            <Text size="sm" fw={700} style={{ fontFamily: 'var(--font-display)', letterSpacing: 1 }}>
+              天球目标反推排齿
+            </Text>
+          </Group>
+        }
+        size="xl"
+        centered
+        styles={{
+          body: { padding: 0 },
+        }}
+      >
       <div style={{ display: 'flex', height: '80vh', overflow: 'hidden' }}>
         <div
           style={{
@@ -376,7 +379,7 @@ export default function ReverseSearchPanel() {
                     isSelected={reverseSearch.selectedCandidateIds.includes(candidate.id)}
                     onToggleExpand={() => setExpandedId(expandedId === candidate.id ? null : candidate.id)}
                     onToggleSelect={() => toggleCandidateSelection(candidate.id)}
-                    onApply={() => applyCandidateScheme(candidate)}
+                    onApply={() => setConfirmCandidate(candidate)}
                     targetPeriodDays={reverseSearch.params.targetPeriodDays}
                   />
                 ))}
@@ -386,6 +389,85 @@ export default function ReverseSearchPanel() {
         </div>
       </div>
     </Modal>
+
+    <Modal
+      opened={!!confirmCandidate}
+      onClose={() => setConfirmCandidate(null)}
+      title={
+        <Group gap={8}>
+          <Download size={20} style={{ color: 'var(--color-copper)' }} />
+          <Text size="sm" fw={700}>应用方案到画布</Text>
+        </Group>
+      }
+      size="sm"
+      centered
+    >
+      <Stack gap="md">
+        <Text size="sm" style={{ color: 'var(--color-text-muted)' }}>
+          确定要将此方案应用到当前画布吗？
+        </Text>
+
+        {confirmCandidate && (
+          <Card withBorder padding="sm" radius={8} style={{ background: 'var(--color-bg-tertiary)' }}>
+            <Stack gap={4}>
+              <Group gap={8}>
+                <Badge size="xs" variant="light" color="copper">
+                  {confirmCandidate.stageCount} 级传动
+                </Badge>
+                <Badge size="xs" variant="light" color={confirmCandidate.theoreticalErrorPercent < 0.5 ? 'green' : 'yellow'}>
+                  误差 {confirmCandidate.theoreticalErrorPercent.toFixed(3)}%
+                </Badge>
+                <Badge size="xs" variant="light" color="steel">
+                  {confirmCandidate.totalGearCount} 齿轮
+                </Badge>
+              </Group>
+              <Text size="xs" style={{ fontFamily: 'var(--font-mono)' }}>
+                周期: {confirmCandidate.actualPeriodDays.toFixed(4)} 天
+              </Text>
+              <Text size="xs" style={{ fontFamily: 'var(--font-mono)' }}>
+                传动比: 1 : {confirmCandidate.totalRatio.toFixed(4)}
+              </Text>
+            </Stack>
+          </Card>
+        )}
+
+        <div
+          style={{
+            padding: 10,
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: 6,
+          }}
+        >
+          <Group gap={8}>
+            <AlertTriangle size={16} color="#ef4444" />
+            <Text size="xs" style={{ color: '#ef4444' }}>
+              当前画布中的所有齿轮和传动轴将被替换，此操作无法撤销。
+            </Text>
+          </Group>
+        </div>
+
+        <Group justify="flex-end" gap={8}>
+          <Button variant="subtle" color="gray" size="sm" onClick={() => setConfirmCandidate(null)}>
+            取消
+          </Button>
+          <Button
+            variant="filled"
+            color="copper"
+            size="sm"
+            onClick={() => {
+              if (confirmCandidate) {
+                applyCandidateScheme(confirmCandidate);
+                setConfirmCandidate(null);
+              }
+            }}
+          >
+            确认应用
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+    </>
   );
 }
 

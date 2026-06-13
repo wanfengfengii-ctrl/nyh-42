@@ -162,6 +162,7 @@ export const useGearStore = create<GearStore>((set, get) => ({
       avoidSelfLock: true,
       maxResults: 30,
     },
+    allCandidates: [],
     candidates: [],
     selectedCandidateIds: [],
     sortBy: 'score',
@@ -314,8 +315,9 @@ export const useGearStore = create<GearStore>((set, get) => ({
     set((s) => {
       const newGears = s.gears.map((g) => {
         if (g.id === gearId) {
-          const { shaftId: _shaftId, ...rest } = g;
-          return rest;
+          const copy = { ...g };
+          delete copy.shaftId;
+          return copy;
         }
         return g;
       });
@@ -599,6 +601,7 @@ export const useGearStore = create<GearStore>((set, get) => ({
         ...st.reverseSearch,
         isSearching: false,
         searchProgress: 100,
+        allCandidates: results,
         candidates: sorted,
         selectedCandidateIds: [],
       },
@@ -607,7 +610,12 @@ export const useGearStore = create<GearStore>((set, get) => ({
 
   setReverseSearchSortBy: (sortBy) => {
     set((s) => {
-      const sorted = sortCandidates(s.reverseSearch.candidates, sortBy);
+      const filtered = filterCandidates(
+        s.reverseSearch.allCandidates,
+        s.reverseSearch.filterSelfLock,
+        s.reverseSearch.filterDirectionConflict
+      );
+      const sorted = sortCandidates(filtered, sortBy);
       return {
         reverseSearch: {
           ...s.reverseSearch,
@@ -621,8 +629,11 @@ export const useGearStore = create<GearStore>((set, get) => ({
   setReverseSearchFilter: (filter, value) => {
     set((s) => {
       const newFilters = { ...s.reverseSearch, [filter]: value };
-      const allCandidates = s.reverseSearch.candidates;
-      const filtered = filterCandidates(allCandidates, newFilters.filterSelfLock, newFilters.filterDirectionConflict);
+      const filtered = filterCandidates(
+        s.reverseSearch.allCandidates,
+        newFilters.filterSelfLock,
+        newFilters.filterDirectionConflict
+      );
       const sorted = sortCandidates(filtered, s.reverseSearch.sortBy);
       return {
         reverseSearch: {

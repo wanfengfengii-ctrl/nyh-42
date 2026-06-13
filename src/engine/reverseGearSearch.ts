@@ -219,16 +219,27 @@ function deduplicateStages(results: GearStage[][]): GearStage[][] {
 }
 
 function estimateLayoutDiameter(stages: GearStage[]): number {
-  let maxX = 0;
-  let x = 0;
-  for (const stage of stages) {
-    const r1 = teethToRadius(stage.driverTeeth);
-    const r2 = teethToRadius(stage.drivenTeeth);
-    x += r1;
-    maxX = Math.max(maxX, x + r2);
-    x += r2;
+  const spacing = 20;
+  const startX = 150;
+  let prevR = teethToRadius(stages[0].driverTeeth);
+  let x = startX;
+  let minX = startX - prevR;
+  let maxX = startX + prevR;
+
+  for (let i = 0; i < stages.length; i++) {
+    const stage = stages[i];
+    const rDriven = teethToRadius(stage.drivenTeeth);
+    x += prevR + rDriven + spacing;
+    minX = Math.min(minX, x - rDriven);
+    maxX = Math.max(maxX, x + rDriven);
+    if (i < stages.length - 1) {
+      const rNextDriver = teethToRadius(stages[i + 1].driverTeeth);
+      minX = Math.min(minX, x - rNextDriver);
+      maxX = Math.max(maxX, x + rNextDriver);
+      prevR = rNextDriver;
+    }
   }
-  return maxX * 2;
+  return maxX - minX;
 }
 
 function checkDirectionOutput(
@@ -462,6 +473,12 @@ export function runReverseSearch(
     const hasRealSelfLock = validation.errors.some((e) => e.type === 'self_lock');
     const hasRealDirConflict = validation.errors.some((e) => e.type === 'direction_conflict');
 
+    const estimatedDiameter = estimateLayoutDiameter(stages);
+
+    if (estimatedDiameter > params.maxDiameter) {
+      continue;
+    }
+
     const candidate: CandidateScheme = {
       id: uuidv4(),
       stages,
@@ -470,7 +487,7 @@ export function runReverseSearch(
       theoreticalErrorPercent: errorPercent,
       stageCount: stages.length,
       totalGearCount: layout.gears.length,
-      estimatedDiameter: estimateLayoutDiameter(stages),
+      estimatedDiameter,
       hasSelfLock: hasSelfLock || hasRealSelfLock,
       directionConflict: dirInfo.conflict || hasRealDirConflict,
       outputDirection: dirInfo.outputDirection,

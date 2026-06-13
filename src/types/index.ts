@@ -195,6 +195,7 @@ export interface ReverseSearchState {
   isSearching: boolean;
   searchProgress: number;
   params: ReverseSearchParams;
+  allCandidates: CandidateScheme[];
   candidates: CandidateScheme[];
   selectedCandidateIds: string[];
   sortBy: 'error' | 'stages' | 'size' | 'score';
