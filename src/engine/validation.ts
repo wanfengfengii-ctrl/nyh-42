@@ -1,5 +1,6 @@
-import type { Gear, MeshRelation, ValidationError, ValidationResult } from '@/types';
+import type { Gear, MeshRelation, ValidationError, ValidationResult, ConflictItem, ConflictReport, BreakpointInfo } from '@/types';
 import { computeTransmission } from './transmission';
+import { detectBreakpoints } from './shaftAssembly';
 
 export function validateTeeth(gears: Gear[]): ValidationError[] {
   const errors: ValidationError[] = [];
@@ -34,6 +35,11 @@ export function validateShaftConflict(gears: Gear[]): ValidationError[] {
         gearIds: drivers.map((d) => d.id),
         message: `轴 ${shaftId} 上不能同时存在两个主传动齿轮`,
       });
+      errors.push({
+        type: 'duplicate_driver_on_shaft',
+        gearIds: drivers.map((d) => d.id),
+        message: `同轴组内禁止重复主传动：${drivers.map((d) => d.name).join('、')} 在同一轴上均为主动轮`,
+      });
     }
   });
   return errors;
@@ -58,13 +64,18 @@ export function validateChainAndConflicts(
 
   const result = computeTransmission(gears, meshes, driverId, driverSpeed);
 
+  const breakpoints = detectBreakpoints(gears, meshes, driverId, result.visitedGears);
+
   gears.forEach((g) => {
     if (!result.visitedGears.has(g.id)) {
-      errors.push({
+      const bp = breakpoints.find((b) => b.gearId === g.id);
+      const error: ValidationError = {
         type: 'chain_broken',
         gearIds: [g.id],
         message: `齿轮 "${g.name}" 未连接到传动链`,
-      });
+        breakpointInfo: bp,
+      };
+      errors.push(error);
     }
   });
 
@@ -265,8 +276,62 @@ export function getBrokenGearIds(
   return broken;
 }
 
+export function getBreakpointInfo(
+  gears: Gear[],
+  meshes: MeshRelation[],
+  driverId: string,
+  driverSpeed: number
+): BreakpointInfo[] {
+  if (!driverId) return [];
+  const result = computeTransmission(gears, meshes, driverId, driverSpeed);
+  return detectBreakpoints(gears, meshes, driverId, result.visitedGears);
+}
+
 export function getInvalidGearIds(errors: ValidationError[]): Set<string> {
   const invalid = new Set<string>();
   errors.forEach((e) => e.gearIds.forEach((id) => invalid.add(id)));
   return invalid;
+}
+
+export function generateConflictReport(
+  gears: Gear[],
+  meshes: MeshRelation[],
+  driverId: string,
+  driverSpeed: number
+): ConflictReport {
+  const result = validateAll(gears, meshes, driverId, driverSpeed);
+  const gearMap = new Map(gears.map((g) => [g.id, g]));
+  const shaftMap = new Map<string, string>();
+
+  gears.forEach((g) => {
+    if (g.shaftId) shaftMap.set(g.id, g.shaftId);
+  });
+
+  const conflicts: ConflictItem[] = result.errors.map((e) => {
+    const isWarning = e.type === 'chain_broken' && gears.filter((g) => e.gearIds.includes(g.id)).length === 1;
+    const severity: 'error' | 'warning' = isWarning ? 'warning' : 'error';
+
+    let shaftId: string | undefined;
+    const gearWithShaft = e.gearIds.find((id) => shaftMap.has(id));
+    if (gearWithShaft) shaftId = shaftMap.get(gearWithShaft);
+
+    return {
+      type: e.type,
+      severity,
+      message: e.message,
+      gearIds: e.gearIds,
+      shaftId,
+    };
+  });
+
+  const totalErrors = conflicts.filter((c) => c.severity === 'error').length;
+  const totalWarnings = conflicts.filter((c) => c.severity === 'warning').length;
+
+  return {
+    timestamp: Date.now(),
+    conflicts,
+    totalErrors,
+    totalWarnings,
+    canSave: totalErrors === 0,
+  };
 }

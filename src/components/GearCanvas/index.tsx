@@ -2,9 +2,10 @@ import { useEffect, useRef, useCallback, useMemo } from 'react';
 import * as d3 from 'd3';
 import { useGearStore } from '@/store/useGearStore';
 import { computeTransmission, computeAngleAtTime } from '@/engine/transmission';
-import { getBrokenGearIds, getInvalidGearIds } from '@/engine/validation';
+import { getBrokenGearIds, getInvalidGearIds, getBreakpointInfo } from '@/engine/validation';
 import { teethToRadius, generateGearPath, distance } from '@/utils/gearMath';
-import type { Gear, MeshRelation, Shaft } from '@/types';
+import { getShaftGroupBounds } from '@/engine/shaftAssembly';
+import type { Gear, MeshRelation, Shaft, ShaftGroup, BreakpointInfo, SnapTarget } from '@/types';
 
 const MESH_PORT_RADIUS = 8;
 const CANVAS_GRID_SIZE = 20;
@@ -29,6 +30,8 @@ export default function GearCanvas() {
   const meshSourceId = useGearStore((s) => s.meshSourceId);
   const pendingMeshType = useGearStore((s) => s.pendingMeshType);
   const mousePos = useGearStore((s) => s.mousePos);
+  const shaftGroups = useGearStore((s) => s.shaftGroups);
+  const activeSnapTarget = useGearStore((s) => s.activeSnapTarget);
 
   const selectGear = useGearStore((s) => s.selectGear);
   const moveGear = useGearStore((s) => s.moveGear);
@@ -40,6 +43,8 @@ export default function GearCanvas() {
   const cancelCreatingMesh = useGearStore((s) => s.cancelCreatingMesh);
   const completeMesh = useGearStore((s) => s.completeMesh);
   const setMousePos = useGearStore((s) => s.setMousePos);
+  const mountGearToShaft = useGearStore((s) => s.mountGearToShaft);
+  const updateSnapTarget = useGearStore((s) => s.updateSnapTarget);
 
   const brokenGearIds = useMemo(
     () => getBrokenGearIds(gears, meshes, driverId, driverSpeed),
@@ -49,6 +54,11 @@ export default function GearCanvas() {
   const invalidGearIds = useMemo(
     () => getInvalidGearIds(validation.errors),
     [validation.errors]
+  );
+
+  const breakpointInfos = useMemo(
+    () => getBreakpointInfo(gears, meshes, driverId, driverSpeed),
+    [gears, meshes, driverId, driverSpeed]
   );
 
   const transmissionResult = useMemo(
@@ -72,6 +82,18 @@ export default function GearCanvas() {
     });
     return angles;
   }, [gears, isPlaying, validation.isValid, elapsedTime, transmissionResult]);
+
+  const shaftGroupVisuals = useMemo(() => {
+    return shaftGroups.map((sg) => {
+      const shaftGears = gears.filter((g) => sg.gearIds.includes(g.id));
+      const bounds = getShaftGroupBounds(
+        shafts.find((s) => s.id === sg.shaftId)!,
+        gears,
+        shaftGears
+      );
+      return { ...sg, bounds, gears: shaftGears };
+    });
+  }, [shaftGroups, shafts, gears]);
 
   useEffect(() => {
     const svg = d3.select(svgRef.current!);
@@ -136,6 +158,7 @@ export default function GearCanvas() {
     (e: React.MouseEvent) => {
       if ((e.target as SVGElement).closest('.gear-group')) return;
       if ((e.target as SVGElement).closest('.mesh-link')) return;
+      if ((e.target as SVGElement).closest('.shaft-group-visual')) return;
       if (isCreatingMesh) {
         cancelCreatingMesh();
         return;
@@ -260,6 +283,24 @@ export default function GearCanvas() {
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+          <filter id="glow-snap">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feFlood floodColor="#06b6d4" floodOpacity="0.5" />
+            <feComposite in2="blur" operator="in" />
+            <feMerge>
+              <feMergeNode />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="glow-breakpoint">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feFlood floodColor="#f59e0b" floodOpacity="0.7" />
+            <feComposite in2="blur" operator="in" />
+            <feMerge>
+              <feMergeNode />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
         <g className="canvas-root">
@@ -270,6 +311,13 @@ export default function GearCanvas() {
             height={canvasH}
             fill="url(#grid-pattern)"
           />
+
+          {shaftGroupVisuals.map((sgv) => (
+            <ShaftGroupVisual
+              key={sgv.shaftId}
+              shaftGroup={sgv}
+            />
+          ))}
 
           {meshLineData.map((m) => {
             const isBroken = brokenGearIds.has(m.sourceId) || brokenGearIds.has(m.targetId);
@@ -309,6 +357,53 @@ export default function GearCanvas() {
             );
           })}
 
+          {breakpointInfos.map((bp) => {
+            const gear = gears.find((g) => g.id === bp.gearId);
+            if (!gear) return null;
+            const neighborGear = gears.find((g) => g.id === bp.neighborIds[0]);
+
+            return (
+              <g key={`bp-${bp.gearId}`}>
+                <circle
+                  cx={gear.x}
+                  cy={gear.y}
+                  r={teethToRadius(gear.teeth) + 10}
+                  fill="none"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  filter="url(#glow-breakpoint)"
+                  opacity={0.8}
+                />
+                <text
+                  x={gear.x}
+                  y={gear.y - teethToRadius(gear.teeth) - 18}
+                  textAnchor="middle"
+                  fill="#f59e0b"
+                  fontSize={9}
+                  fontFamily="var(--font-mono)"
+                  fontWeight={700}
+                  style={{ pointerEvents: 'none' }}
+                >
+                  ⚡ 断点
+                </text>
+                {neighborGear && (
+                  <line
+                    x1={gear.x}
+                    y1={gear.y}
+                    x2={neighborGear.x}
+                    y2={neighborGear.y}
+                    stroke="#f59e0b"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                    opacity={0.5}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                )}
+              </g>
+            );
+          })}
+
           {isCreatingMesh && meshSourceId && (() => {
             const sourceGear = gears.find((g) => g.id === meshSourceId);
             if (!sourceGear) return null;
@@ -330,6 +425,21 @@ export default function GearCanvas() {
             <ShaftNode key={shaft.id} shaft={shaft} />
           ))}
 
+          {activeSnapTarget && (
+            <circle
+              cx={activeSnapTarget.x}
+              cy={activeSnapTarget.y}
+              r={20}
+              fill="none"
+              stroke="#06b6d4"
+              strokeWidth={2}
+              strokeDasharray="6 3"
+              filter="url(#glow-snap)"
+              opacity={0.8}
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+
           {gears.map((gear) => (
             <GearNode
               key={gear.id}
@@ -349,6 +459,9 @@ export default function GearCanvas() {
               otherGears={gears.filter((g) => g.id !== gear.id)}
               isPlaying={isPlaying}
               elapsedTime={elapsedTime}
+              activeSnapTarget={activeSnapTarget}
+              onSnapMount={(shaftId) => mountGearToShaft(gear.id, shaftId)}
+              onUpdateSnapTarget={(x, y) => updateSnapTarget(gear.id, x, y)}
             />
           ))}
         </g>
@@ -378,6 +491,46 @@ export default function GearCanvas() {
   );
 }
 
+interface ShaftGroupVisualProps {
+  shaftGroup: ShaftGroup & { bounds: { cx: number; cy: number; width: number; height: number }; gears: Gear[] };
+}
+
+function ShaftGroupVisual({ shaftGroup }: ShaftGroupVisualProps) {
+  const { bounds, shaftName, gearIds, hasDriver } = shaftGroup;
+
+  if (gearIds.length === 0) return null;
+
+  return (
+    <g className="shaft-group-visual">
+      <rect
+        x={bounds.cx - bounds.width / 2}
+        y={bounds.cy - bounds.height / 2}
+        width={bounds.width}
+        height={bounds.height}
+        rx={8}
+        ry={8}
+        fill={hasDriver ? 'rgba(212, 117, 60, 0.06)' : 'rgba(74, 144, 164, 0.06)'}
+        stroke={hasDriver ? 'rgba(212, 117, 60, 0.3)' : 'rgba(74, 144, 164, 0.3)'}
+        strokeWidth={1}
+        strokeDasharray="6 3"
+      />
+      <text
+        x={bounds.cx}
+        y={bounds.cy - bounds.height / 2 - 4}
+        textAnchor="middle"
+        fill={hasDriver ? 'var(--color-copper)' : 'var(--color-steel)'}
+        fontSize={8}
+        fontFamily="var(--font-mono)"
+        fontWeight={600}
+        opacity={0.7}
+        style={{ pointerEvents: 'none' }}
+      >
+        {hasDriver ? '⊕ 主传动轴组' : '○ 从动轴组'} · {shaftName}
+      </text>
+    </g>
+  );
+}
+
 interface GearNodeProps {
   gear: Gear;
   angle: number;
@@ -395,6 +548,9 @@ interface GearNodeProps {
   otherGears: Gear[];
   isPlaying: boolean;
   elapsedTime: number;
+  activeSnapTarget: SnapTarget | null;
+  onSnapMount: (shaftId: string) => void;
+  onUpdateSnapTarget: (x: number, y: number) => void;
 }
 
 function GearNode({
@@ -411,7 +567,9 @@ function GearNode({
   onSelect,
   onMove,
   onCompleteMesh,
-  otherGears,
+  activeSnapTarget,
+  onSnapMount,
+  onUpdateSnapTarget,
 }: GearNodeProps) {
   const groupRef = useRef<SVGGElement>(null);
   const isDragging = useRef(false);
@@ -432,7 +590,6 @@ function GearNode({
       const svg = (e.target as SVGElement).closest('svg');
       if (!svg) return;
 
-      const point = svg.createSVGPoint();
       const transform = d3.select(svg).select<SVGGElement>('.canvas-root').attr('transform');
       let tx = 0, ty = 0, scale = 1;
       if (transform) {
@@ -449,11 +606,17 @@ function GearNode({
         if (!isDragging.current) return;
         const dx = (ev.clientX - startX) / scale;
         const dy = (ev.clientY - startY) / scale;
-        onMove(dragStart.current.x + dx, dragStart.current.y + dy);
+        const newX = dragStart.current.x + dx;
+        const newY = dragStart.current.y + dy;
+        onMove(newX, newY);
+        onUpdateSnapTarget(newX, newY);
       };
 
       const handleMouseUp = () => {
         isDragging.current = false;
+        if (activeSnapTarget) {
+          onSnapMount(activeSnapTarget.shaftId);
+        }
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
       };
@@ -461,7 +624,7 @@ function GearNode({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [gear.x, gear.y, onMove, isCreatingMeshSource]
+    [gear.x, gear.y, onMove, isCreatingMeshSource, activeSnapTarget, onSnapMount, onUpdateSnapTarget]
   );
 
   const handleClick = useCallback(
@@ -539,6 +702,18 @@ function GearNode({
         )}
       </g>
 
+      {gear.shaftId && (
+        <circle
+          r={6}
+          cx={radius + 10}
+          cy={-radius + 4}
+          fill="var(--color-steel)"
+          opacity={0.7}
+          stroke="var(--color-bg)"
+          strokeWidth={1}
+        />
+      )}
+
       {!isCreatingMeshSource && !isPotentialTarget && (
         <>
           <circle
@@ -605,6 +780,7 @@ function GearNode({
       >
         z={gear.teeth}
         {transmissionState && ` · ω=${(transmissionState.angularVelocity * 60 / (2 * Math.PI)).toFixed(1)}rpm`}
+        {gear.shaftId && ' · ⊕'}
       </text>
 
       {isInvalid && (

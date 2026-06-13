@@ -8,10 +8,16 @@ import type {
   RotationDirection,
   Scheme,
   Shaft,
+  ShaftGroup,
   TimePeriod,
   ValidationResult,
+  ConflictReport,
+  ChainRecommendation,
+  SnapTarget,
 } from '@/types';
-import { validateAll } from '@/engine/validation';
+import { validateAll, generateConflictReport } from '@/engine/validation';
+import { computeShaftGroups, findSnapTarget, canMountGearToShaft } from '@/engine/shaftAssembly';
+import { recommendChains } from '@/engine/chainRecommender';
 import { loadSchemes, saveSingleScheme, deleteScheme } from '@/utils/storage';
 
 const GEAR_COLORS = [
@@ -49,6 +55,10 @@ interface GearStore {
   validation: ValidationResult;
   schemeName: string;
   currentSchemeId: string | null;
+  shaftGroups: ShaftGroup[];
+  conflictReport: ConflictReport | null;
+  chainRecommendations: ChainRecommendation[];
+  activeSnapTarget: SnapTarget | null;
 
   addGear: (type: GearType, x: number, y: number) => void;
   updateGear: (id: string, updates: Partial<Gear>) => void;
@@ -58,6 +68,10 @@ interface GearStore {
 
   addShaft: (x: number, y: number) => void;
   removeShaft: (id: string) => void;
+
+  mountGearToShaft: (gearId: string, shaftId: string) => void;
+  unmountGearFromShaft: (gearId: string) => void;
+  updateSnapTarget: (gearId: string, x: number, y: number) => void;
 
   startCreatingMesh: (sourceId: string, type: MeshType) => void;
   cancelCreatingMesh: () => void;
@@ -77,6 +91,9 @@ interface GearStore {
   resetTime: () => void;
 
   validate: () => void;
+  generateReport: () => ConflictReport;
+  getChainRecommendations: () => ChainRecommendation[];
+  applyChainRecommendation: (rec: ChainRecommendation) => void;
 
   newScheme: () => void;
   loadScheme: (id: string) => void;
@@ -84,6 +101,10 @@ interface GearStore {
   deleteSavedScheme: (id: string) => void;
   setSchemeName: (name: string) => void;
   refreshSavedSchemes: () => void;
+}
+
+function recomputeShaftGroups(gears: Gear[], shafts: Shaft[]): ShaftGroup[] {
+  return computeShaftGroups(gears, shafts);
 }
 
 export const useGearStore = create<GearStore>((set, get) => ({
@@ -106,6 +127,10 @@ export const useGearStore = create<GearStore>((set, get) => ({
   validation: { isValid: false, errors: [] },
   schemeName: '未命名方案',
   currentSchemeId: null,
+  shaftGroups: [],
+  conflictReport: null,
+  chainRecommendations: [],
+  activeSnapTarget: null,
 
   addGear: (type, x, y) => {
     const state = get();
@@ -130,14 +155,22 @@ export const useGearStore = create<GearStore>((set, get) => ({
     };
     const newGears = [...state.gears, newGear];
     const newDriverId = state.driverId || (index === 0 ? id : state.driverId);
-    set({ gears: newGears, driverId: newDriverId });
+    set({
+      gears: newGears,
+      driverId: newDriverId,
+      shaftGroups: recomputeShaftGroups(newGears, state.shafts),
+    });
     get().validate();
   },
 
   updateGear: (id, updates) => {
-    set((s) => ({
-      gears: s.gears.map((g) => (g.id === id ? { ...g, ...updates } : g)),
-    }));
+    set((s) => {
+      const newGears = s.gears.map((g) => (g.id === id ? { ...g, ...updates } : g));
+      return {
+        gears: newGears,
+        shaftGroups: recomputeShaftGroups(newGears, s.shafts),
+      };
+    });
     get().validate();
   },
 
@@ -157,6 +190,7 @@ export const useGearStore = create<GearStore>((set, get) => ({
         meshes: newMeshes,
         driverId: newDriverId,
         selectedGearId: newSelected,
+        shaftGroups: recomputeShaftGroups(newGears, s.shafts),
       };
     });
     get().validate();
@@ -167,27 +201,90 @@ export const useGearStore = create<GearStore>((set, get) => ({
   },
 
   moveGear: (id, x, y) => {
-    set((s) => ({
-      gears: s.gears.map((g) => (g.id === id ? { ...g, x, y } : g)),
-    }));
+    set((s) => {
+      const newGears = s.gears.map((g) => (g.id === id ? { ...g, x, y } : g));
+      return {
+        gears: newGears,
+        shaftGroups: recomputeShaftGroups(newGears, s.shafts),
+      };
+    });
   },
 
   addShaft: (x, y) => {
     const state = get();
     const index = state.shafts.length;
+    const newShafts = [
+      ...state.shafts,
+      { id: uuidv4(), name: `传动轴 ${index + 1}`, x, y },
+    ];
     set((s) => ({
-      shafts: [
-        ...s.shafts,
-        { id: uuidv4(), name: `传动轴 ${index + 1}`, x, y },
-      ],
+      shafts: newShafts,
+      shaftGroups: recomputeShaftGroups(s.gears, newShafts),
     }));
   },
 
   removeShaft: (id) => {
-    set((s) => ({
-      shafts: s.shafts.filter((sh) => sh.id !== id),
-      gears: s.gears.map((g) => (g.shaftId === id ? { ...g, shaftId: undefined } : g)),
-    }));
+    set((s) => {
+      const newShafts = s.shafts.filter((sh) => sh.id !== id);
+      const newGears = s.gears.map((g) => (g.shaftId === id ? { ...g, shaftId: undefined } : g));
+      return {
+        shafts: newShafts,
+        gears: newGears,
+        shaftGroups: recomputeShaftGroups(newGears, newShafts),
+      };
+    });
+    get().validate();
+  },
+
+  mountGearToShaft: (gearId, shaftId) => {
+    const state = get();
+    const gear = state.gears.find((g) => g.id === gearId);
+    if (!gear) return;
+
+    const check = canMountGearToShaft(gear, shaftId, state.gears, state.driverId);
+    if (!check.allowed) return;
+
+    const shaft = state.shafts.find((s) => s.id === shaftId);
+    if (!shaft) return;
+
+    set((s) => {
+      const newGears = s.gears.map((g) => {
+        if (g.id === gearId) {
+          return { ...g, shaftId, x: shaft.x, y: shaft.y };
+        }
+        return g;
+      });
+      return {
+        gears: newGears,
+        shaftGroups: recomputeShaftGroups(newGears, s.shafts),
+        activeSnapTarget: null,
+      };
+    });
+    get().validate();
+  },
+
+  unmountGearFromShaft: (gearId) => {
+    set((s) => {
+      const newGears = s.gears.map((g) => {
+        if (g.id === gearId) {
+          const { shaftId, ...rest } = g;
+          return rest;
+        }
+        return g;
+      });
+      return {
+        gears: newGears,
+        shaftGroups: recomputeShaftGroups(newGears, s.shafts),
+      };
+    });
+    get().validate();
+  },
+
+  updateSnapTarget: (gearId, x, y) => {
+    const state = get();
+    const gear = state.gears.find((g) => g.id === gearId);
+    const snap = findSnapTarget(x, y, state.shafts, gear?.shaftId);
+    set({ activeSnapTarget: snap });
   },
 
   startCreatingMesh: (sourceId, type) => {
@@ -294,6 +391,46 @@ export const useGearStore = create<GearStore>((set, get) => ({
     set({ validation: result });
   },
 
+  generateReport: () => {
+    const s = get();
+    const report = generateConflictReport(s.gears, s.meshes, s.driverId, s.driverSpeed);
+    set({ conflictReport: report });
+    return report;
+  },
+
+  getChainRecommendations: () => {
+    const s = get();
+    const recs = recommendChains(s.gears, s.meshes, s.driverId);
+    set({ chainRecommendations: recs });
+    return recs;
+  },
+
+  applyChainRecommendation: (rec) => {
+    const state = get();
+    const exists = state.meshes.some(
+      (m) =>
+        (m.sourceId === rec.sourceGearId && m.targetId === rec.targetGearId) ||
+        (m.sourceId === rec.targetGearId && m.targetId === rec.sourceGearId)
+    );
+    if (!exists) {
+      set((s) => ({
+        meshes: [
+          ...s.meshes,
+          {
+            id: uuidv4(),
+            sourceId: rec.sourceGearId,
+            targetId: rec.targetGearId,
+            type: rec.connectionType,
+          },
+        ],
+        chainRecommendations: s.chainRecommendations.filter(
+          (r) => !(r.sourceGearId === rec.sourceGearId && r.targetGearId === rec.targetGearId)
+        ),
+      }));
+      get().validate();
+    }
+  },
+
   newScheme: () => {
     set({
       gears: [],
@@ -310,12 +447,17 @@ export const useGearStore = create<GearStore>((set, get) => ({
       schemeName: '未命名方案',
       validation: { isValid: false, errors: [] },
       currentSchemeId: null,
+      shaftGroups: [],
+      conflictReport: null,
+      chainRecommendations: [],
+      activeSnapTarget: null,
     });
   },
 
   loadScheme: (id) => {
     const scheme = get().savedSchemes.find((s) => s.id === id);
     if (scheme) {
+      const shaftGroups = computeShaftGroups(scheme.gears, scheme.shafts);
       set({
         gears: scheme.gears,
         shafts: scheme.shafts,
@@ -330,6 +472,10 @@ export const useGearStore = create<GearStore>((set, get) => ({
         meshSourceId: null,
         schemeName: scheme.name,
         currentSchemeId: scheme.id,
+        shaftGroups,
+        conflictReport: null,
+        chainRecommendations: [],
+        activeSnapTarget: null,
       });
       get().validate();
     }
@@ -337,7 +483,8 @@ export const useGearStore = create<GearStore>((set, get) => ({
 
   saveCurrentScheme: () => {
     const s = get();
-    if (!s.validation.isValid) return false;
+    const report = s.generateReport();
+    if (!report.canSave) return false;
     const schemes = loadSchemes();
     let schemeId = s.currentSchemeId;
     if (!schemeId) {

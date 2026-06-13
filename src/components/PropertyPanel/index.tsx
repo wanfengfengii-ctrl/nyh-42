@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { Text, TextInput, NumberInput, Select, Switch, Stack, Group, Badge, Divider, ActionIcon, Tooltip } from '@mantine/core';
-import { Trash2, Star, AlertTriangle } from 'lucide-react';
+import { Trash2, Star, AlertTriangle, Unlink } from 'lucide-react';
 import { useGearStore } from '@/store/useGearStore';
 import { computeTransmission } from '@/engine/transmission';
 import { rpmToRadPerSec, formatRpm, formatAngle } from '@/utils/gearMath';
@@ -8,17 +8,21 @@ import type { RotationDirection } from '@/types';
 
 export default function PropertyPanel() {
   const gears = useGearStore((s) => s.gears);
+  const shafts = useGearStore((s) => s.shafts);
   const meshes = useGearStore((s) => s.meshes);
   const selectedGearId = useGearStore((s) => s.selectedGearId);
   const selectedMeshId = useGearStore((s) => s.selectedMeshId);
   const driverId = useGearStore((s) => s.driverId);
   const driverSpeed = useGearStore((s) => s.driverSpeed);
   const validation = useGearStore((s) => s.validation);
+  const shaftGroups = useGearStore((s) => s.shaftGroups);
 
   const updateGear = useGearStore((s) => s.updateGear);
   const removeGear = useGearStore((s) => s.removeGear);
   const setDriver = useGearStore((s) => s.setDriver);
   const removeMesh = useGearStore((s) => s.removeMesh);
+  const mountGearToShaft = useGearStore((s) => s.mountGearToShaft);
+  const unmountGearFromShaft = useGearStore((s) => s.unmountGearFromShaft);
 
   const selectedGear = useMemo(
     () => gears.find((g) => g.id === selectedGearId),
@@ -44,6 +48,11 @@ export default function PropertyPanel() {
     () => meshes.filter((m) => m.sourceId === selectedGearId || m.targetId === selectedGearId),
     [meshes, selectedGearId]
   );
+
+  const selectedGearShaftGroup = useMemo(() => {
+    if (!selectedGear?.shaftId) return null;
+    return shaftGroups.find((sg) => sg.shaftId === selectedGear.shaftId) || null;
+  }, [selectedGear, shaftGroups]);
 
   const handleTeethChange = useCallback(
     (value: number | string) => {
@@ -82,6 +91,19 @@ export default function PropertyPanel() {
     },
     [selectedGearId, updateGear]
   );
+
+  const handleMountToShaft = useCallback(
+    (shaftId: string) => {
+      if (!selectedGearId) return;
+      mountGearToShaft(selectedGearId, shaftId);
+    },
+    [selectedGearId, mountGearToShaft]
+  );
+
+  const handleUnmountFromShaft = useCallback(() => {
+    if (!selectedGearId) return;
+    unmountGearFromShaft(selectedGearId);
+  }, [selectedGearId, unmountGearFromShaft]);
 
   if (selectedMesh) {
     const sourceGear = gears.find((g) => g.id === selectedMesh.sourceId);
@@ -134,6 +156,7 @@ export default function PropertyPanel() {
   }
 
   const state = transmissionResult.gearStates.get(selectedGear.id);
+  const availableShafts = shafts.filter((s) => s.id !== selectedGear.shaftId);
 
   return (
     <div style={panelStyle}>
@@ -211,6 +234,52 @@ export default function PropertyPanel() {
 
       <Divider my="sm" color="var(--color-border)" />
 
+      <Text size="xs" fw={600} style={{ color: 'var(--color-steel)', marginBottom: 4 }}>
+        轴装配
+      </Text>
+
+      {selectedGear.shaftId ? (
+        <Stack gap={4}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Badge size="xs" variant="light" color="steel" leftSection="⊕">
+              {shafts.find((s) => s.id === selectedGear.shaftId)?.name || '未知轴'}
+            </Badge>
+            <Tooltip label="从轴上卸下">
+              <ActionIcon variant="subtle" color="red" size="xs" onClick={handleUnmountFromShaft}>
+                <Unlink size={12} />
+              </ActionIcon>
+            </Tooltip>
+          </div>
+          {selectedGearShaftGroup && (
+            <Text size="xs" style={{ color: 'var(--color-text-muted)', marginTop: 2 }}>
+              轴组: {selectedGearShaftGroup.gearIds.length} 个齿轮
+              {selectedGearShaftGroup.hasDriver ? ' · 含主传动' : ' · 从动'}
+            </Text>
+          )}
+        </Stack>
+      ) : (
+        <Stack gap={4}>
+          <Text size="xs" style={{ color: 'var(--color-text-muted)' }}>
+            未挂载到传动轴
+          </Text>
+          {availableShafts.length > 0 && (
+            <Select
+              label="挂载到轴"
+              size="xs"
+              placeholder="选择轴..."
+              data={availableShafts.map((s) => ({ value: s.id, label: s.name }))}
+              onChange={(v) => v && handleMountToShaft(v)}
+              styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' } }}
+            />
+          )}
+          <Text size="xs" style={{ color: 'var(--color-text-muted)', fontSize: 9 }}>
+            拖拽齿轮靠近传动轴可自动吸附挂载
+          </Text>
+        </Stack>
+      )}
+
+      <Divider my="sm" color="var(--color-border)" />
+
       <Text size="xs" fw={600} style={{ color: 'var(--color-text-muted)', marginBottom: 4 }}>
         传动计算
       </Text>
@@ -271,6 +340,9 @@ export default function PropertyPanel() {
       {gearErrors.length > 0 && (
         <>
           <Divider my="sm" color="var(--color-border)" />
+          <Text size="xs" fw={600} style={{ color: 'var(--color-error)', marginBottom: 4 }}>
+            冲突详情 ({gearErrors.length})
+          </Text>
           <Stack gap={4}>
             {gearErrors.map((e, i) => (
               <div
@@ -286,9 +358,16 @@ export default function PropertyPanel() {
                 }}
               >
                 <AlertTriangle size={12} style={{ color: 'var(--color-error)', marginTop: 2, flexShrink: 0 }} />
-                <Text size="xs" style={{ color: 'var(--color-error)' }}>
-                  {e.message}
-                </Text>
+                <div>
+                  <Text size="xs" style={{ color: 'var(--color-error)' }}>
+                    {e.message}
+                  </Text>
+                  {e.breakpointInfo && (
+                    <Text size="xs" style={{ color: '#f59e0b', marginTop: 2, fontSize: 9 }}>
+                      断点: 需要{e.breakpointInfo.expectedConnectionType === 'mesh' ? '啮合' : '同轴'}连接
+                    </Text>
+                  )}
+                </div>
               </div>
             ))}
           </Stack>
