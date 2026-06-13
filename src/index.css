@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #1a1f2e;
+  --color-bg-secondary: #141824;
+  --color-bg-tertiary: #0d1018;
+  --color-surface: #1e2338;
+  --color-surface-hover: #2a3050;
+  --color-border: #2a3050;
+  --color-border-hover: #3d4560;
+  --color-copper: #d4753c;
+  --color-copper-dim: #a94f24;
+  --color-steel: #4a90a4;
+  --color-steel-dim: #336779;
+  --color-text: #e8ecf0;
+  --color-text-muted: #8a92a6;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
+  --color-success: #10b981;
+  --color-chain-broken: #ef4444;
+  --color-glow-copper: rgba(212, 117, 60, 0.4);
+  --color-glow-error: rgba(239, 68, 68, 0.5);
+  --font-display: 'Orbitron', sans-serif;
+  --font-mono: 'Roboto Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-mono);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.mantine-Input-input {
+  font-family: var(--font-mono) !important;
+}
+
+.mantine-TextInput-root,
+.mantine-NumberInput-root,
+.mantine-Select-root {
+  font-family: var(--font-mono) !important;
+}
+
+@keyframes pulse-error {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes gear-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dash-flow {
+  to { stroke-dashoffset: -20; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-pulse-error {
+  animation: pulse-error 1s ease-in-out infinite;
+}
+
+.animate-dash-flow {
+  animation: dash-flow 0.8s linear infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.gear-node {
+  cursor: grab;
+  transition: filter 0.15s ease;
+}
+
+.gear-node:hover {
+  filter: brightness(1.2);
+}
+
+.gear-node.selected {
+  filter: drop-shadow(0 0 8px var(--color-glow-copper));
+}
+
+.gear-node.error {
+  filter: drop-shadow(0 0 10px var(--color-glow-error));
+}
+
+.mesh-link {
+  transition: stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+.mesh-link:hover {
+  stroke-width: 3;
+}
+
+.mesh-link.broken {
+  stroke: var(--color-chain-broken);
+  stroke-dasharray: 6 4;
+  animation: dash-flow 0.8s linear infinite;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-hover);
+}
