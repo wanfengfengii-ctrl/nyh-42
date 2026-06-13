@@ -308,8 +308,7 @@ export function generateConflictReport(
   });
 
   const conflicts: ConflictItem[] = result.errors.map((e) => {
-    const isWarning = e.type === 'chain_broken' && gears.filter((g) => e.gearIds.includes(g.id)).length === 1;
-    const severity: 'error' | 'warning' = isWarning ? 'warning' : 'error';
+    const severity: 'error' | 'warning' = 'error';
 
     let shaftId: string | undefined;
     const gearWithShaft = e.gearIds.find((id) => shaftMap.has(id));
@@ -332,6 +331,6 @@ export function generateConflictReport(
     conflicts,
     totalErrors,
     totalWarnings,
-    canSave: totalErrors === 0,
+    canSave: result.isValid,
   };
 }

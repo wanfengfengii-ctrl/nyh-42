@@ -109,6 +109,9 @@ export function detectBreakpoints(
 
   for (const gear of unvisited) {
     const neighbors = adjMap.get(gear.id) || [];
+
+    if (neighbors.length === 0) continue;
+
     const visitedNeighbors = neighbors.filter((n) => visitedGearIds.has(n.targetId));
 
     if (visitedNeighbors.length === 0 && neighbors.length > 0) {
@@ -129,19 +132,7 @@ export function detectBreakpoints(
           expectedConnectionType: neighbors[0].type,
         });
       }
-    } else if (visitedNeighbors.length === 0 && neighbors.length === 0) {
-      const closestVisited = gears
-        .filter((g) => visitedGearIds.has(g.id))
-        .sort((a, b) => distance(gear.x, gear.y, a.x, a.y) - distance(gear.x, gear.y, b.x, b.y));
-
-      if (closestVisited.length > 0) {
-        breakpoints.push({
-          gearId: gear.id,
-          neighborIds: [closestVisited[0].id],
-          expectedConnectionType: 'mesh',
-        });
-      }
-    } else {
+    } else if (visitedNeighbors.length > 0) {
       breakpoints.push({
         gearId: gear.id,
         neighborIds: visitedNeighbors.map((n) => n.targetId),

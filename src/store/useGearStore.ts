@@ -239,13 +239,22 @@ export const useGearStore = create<GearStore>((set, get) => ({
   mountGearToShaft: (gearId, shaftId) => {
     const state = get();
     const gear = state.gears.find((g) => g.id === gearId);
-    if (!gear) return;
+    if (!gear) {
+      set({ activeSnapTarget: null });
+      return;
+    }
 
     const check = canMountGearToShaft(gear, shaftId, state.gears, state.driverId);
-    if (!check.allowed) return;
+    if (!check.allowed) {
+      set({ activeSnapTarget: null });
+      return;
+    }
 
     const shaft = state.shafts.find((s) => s.id === shaftId);
-    if (!shaft) return;
+    if (!shaft) {
+      set({ activeSnapTarget: null });
+      return;
+    }
 
     set((s) => {
       const newGears = s.gears.map((g) => {
