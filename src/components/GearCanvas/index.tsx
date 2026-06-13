@@ -4,7 +4,7 @@ import { useGearStore } from '@/store/useGearStore';
 import { computeTransmission, computeAngleAtTime } from '@/engine/transmission';
 import { getBrokenGearIds, getInvalidGearIds } from '@/engine/validation';
 import { teethToRadius, generateGearPath, distance } from '@/utils/gearMath';
-import type { Gear, MeshRelation } from '@/types';
+import type { Gear, MeshRelation, Shaft } from '@/types';
 
 const MESH_PORT_RADIUS = 8;
 const CANVAS_GRID_SIZE = 20;
@@ -15,6 +15,7 @@ export default function GearCanvas() {
   const gRef = useRef<SVGGElement | null>(null);
 
   const gears = useGearStore((s) => s.gears);
+  const shafts = useGearStore((s) => s.shafts);
   const meshes = useGearStore((s) => s.meshes);
   const selectedGearId = useGearStore((s) => s.selectedGearId);
   const selectedMeshId = useGearStore((s) => s.selectedMeshId);
@@ -27,15 +28,18 @@ export default function GearCanvas() {
   const isCreatingMesh = useGearStore((s) => s.isCreatingMesh);
   const meshSourceId = useGearStore((s) => s.meshSourceId);
   const pendingMeshType = useGearStore((s) => s.pendingMeshType);
+  const mousePos = useGearStore((s) => s.mousePos);
 
   const selectGear = useGearStore((s) => s.selectGear);
   const moveGear = useGearStore((s) => s.moveGear);
   const addGear = useGearStore((s) => s.addGear);
+  const addShaft = useGearStore((s) => s.addShaft);
   const removeGear = useGearStore((s) => s.removeGear);
   const selectMesh = useGearStore((s) => s.selectMesh);
   const startCreatingMesh = useGearStore((s) => s.startCreatingMesh);
   const cancelCreatingMesh = useGearStore((s) => s.cancelCreatingMesh);
   const completeMesh = useGearStore((s) => s.completeMesh);
+  const setMousePos = useGearStore((s) => s.setMousePos);
 
   const brokenGearIds = useMemo(
     () => getBrokenGearIds(gears, meshes, driverId, driverSpeed),
@@ -98,8 +102,8 @@ export default function GearCanvas() {
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-      const type = e.dataTransfer.getData('gearType') as Gear['type'] | '';
-      if (!type) return;
+      const gearType = e.dataTransfer.getData('gearType') as Gear['type'] | '';
+      const itemKind = e.dataTransfer.getData('itemKind') as 'gear' | 'shaft' | '';
 
       const svg = svgRef.current!;
       const rect = svg.getBoundingClientRect();
@@ -119,9 +123,13 @@ export default function GearCanvas() {
       const x = (point.x - tx) / scale;
       const y = (point.y - ty) / scale;
 
-      addGear(type, x, y);
+      if (itemKind === 'shaft') {
+        addShaft(x, y);
+      } else if (gearType) {
+        addGear(gearType, x, y);
+      }
     },
-    [addGear]
+    [addGear, addShaft]
   );
 
   const handleCanvasClick = useCallback(
@@ -136,6 +144,31 @@ export default function GearCanvas() {
       selectMesh(null);
     },
     [isCreatingMesh, cancelCreatingMesh, selectGear, selectMesh]
+  );
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isCreatingMesh) return;
+      const svg = svgRef.current!;
+      const rect = svg.getBoundingClientRect();
+      const point = svg.createSVGPoint();
+      point.x = e.clientX - rect.left;
+      point.y = e.clientY - rect.top;
+
+      const transform = d3.select(svg).select<SVGGElement>('.canvas-root').attr('transform');
+      let tx = 0, ty = 0, scale = 1;
+      if (transform) {
+        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+        const scaleMatch = transform.match(/scale\(([^)]+)\)/);
+        if (match) { tx = parseFloat(match[1]); ty = parseFloat(match[2]); }
+        if (scaleMatch) { scale = parseFloat(scaleMatch[1]); }
+      }
+
+      const x = (point.x - tx) / scale;
+      const y = (point.y - ty) / scale;
+      setMousePos({ x, y });
+    },
+    [isCreatingMesh, setMousePos]
   );
 
   useEffect(() => {
@@ -176,6 +209,7 @@ export default function GearCanvas() {
         width="100%"
         height="100%"
         onClick={handleCanvasClick}
+        onMouseMove={handleMouseMove}
         style={{ display: 'block' }}
       >
         <defs>
@@ -279,26 +313,22 @@ export default function GearCanvas() {
             const sourceGear = gears.find((g) => g.id === meshSourceId);
             if (!sourceGear) return null;
             return (
-              <GearNode
-                key={meshSourceId}
-                gear={sourceGear}
-                angle={gearAngles.get(meshSourceId) || 0}
-                isSelected={true}
-                isBroken={false}
-                isInvalid={false}
-                isDriver={sourceGear.isDriver}
-                transmissionState={transmissionResult.gearStates.get(meshSourceId)}
-                isCreatingMeshSource={true}
-                onStartMesh={(type) => startCreatingMesh(meshSourceId, type)}
-                onSelect={() => selectGear(meshSourceId)}
-                onMove={(x, y) => moveGear(meshSourceId, x, y)}
-                onCompleteMesh={(targetId) => completeMesh(targetId)}
-                otherGears={gears.filter((g) => g.id !== meshSourceId)}
-                isPlaying={isPlaying}
-                elapsedTime={elapsedTime}
+              <line
+                x1={sourceGear.x}
+                y1={sourceGear.y}
+                x2={mousePos.x}
+                y2={mousePos.y}
+                stroke={pendingMeshType === 'mesh' ? 'var(--color-copper)' : 'var(--color-steel)'}
+                strokeWidth={2}
+                strokeDasharray="6 4"
+                opacity={0.8}
               />
             );
           })()}
+
+          {shafts.map((shaft) => (
+            <ShaftNode key={shaft.id} shaft={shaft} />
+          ))}
 
           {gears.map((gear) => (
             <GearNode
@@ -311,6 +341,7 @@ export default function GearCanvas() {
               isDriver={gear.isDriver}
               transmissionState={transmissionResult.gearStates.get(gear.id)}
               isCreatingMeshSource={isCreatingMesh && meshSourceId === gear.id}
+              isPotentialTarget={isCreatingMesh && meshSourceId !== gear.id}
               onStartMesh={(type) => startCreatingMesh(gear.id, type)}
               onSelect={() => selectGear(gear.id)}
               onMove={(x, y) => moveGear(gear.id, x, y)}
@@ -356,6 +387,7 @@ interface GearNodeProps {
   isDriver: boolean;
   transmissionState: { angularVelocity: number; direction: string } | undefined;
   isCreatingMeshSource: boolean;
+  isPotentialTarget: boolean;
   onStartMesh: (type: 'mesh' | 'shaft') => void;
   onSelect: () => void;
   onMove: (x: number, y: number) => void;
@@ -374,6 +406,7 @@ function GearNode({
   isDriver,
   transmissionState,
   isCreatingMeshSource,
+  isPotentialTarget,
   onStartMesh,
   onSelect,
   onMove,
@@ -443,10 +476,10 @@ function GearNode({
   const handlePortClick = useCallback(
     (e: React.MouseEvent, type: 'mesh' | 'shaft') => {
       e.stopPropagation();
-      if (isCreatingMeshSource) return;
+      if (isPotentialTarget) return;
       onStartMesh(type);
     },
-    [onStartMesh, isCreatingMeshSource]
+    [onStartMesh, isPotentialTarget]
   );
 
   const handleGearClickAsTarget = useCallback(
@@ -458,7 +491,7 @@ function GearNode({
     [isCreatingMeshSource, onCompleteMesh, gear.id]
   );
 
-  const shouldHighlightAsTarget = isCreatingMeshSource;
+  const shouldHighlightAsTarget = isPotentialTarget;
 
   const filterAttr = isInvalid
     ? 'url(#glow-error)'
@@ -506,7 +539,7 @@ function GearNode({
         )}
       </g>
 
-      {!isCreatingMeshSource && !shouldHighlightAsTarget && (
+      {!isCreatingMeshSource && !isPotentialTarget && (
         <>
           <circle
             cx={0}
@@ -584,6 +617,43 @@ function GearNode({
           className="animate-pulse-error"
         />
       )}
+    </g>
+  );
+}
+
+function ShaftNode({ shaft }: { shaft: Shaft }) {
+  return (
+    <g transform={`translate(${shaft.x}, ${shaft.y})`} style={{ cursor: 'pointer' }}>
+      <circle
+        r={14}
+        fill="none"
+        stroke="var(--color-steel)"
+        strokeWidth={2}
+        strokeDasharray="4 2"
+        opacity={0.6}
+      />
+      <circle
+        r={8}
+        fill="var(--color-bg-tertiary)"
+        stroke="var(--color-steel)"
+        strokeWidth={1.5}
+      />
+      <circle r={2} fill="var(--color-steel)" />
+      <line x1={-14} y1={0} x2={-18} y2={0} stroke="var(--color-steel)" strokeWidth={1.5} />
+      <line x1={14} y1={0} x2={18} y2={0} stroke="var(--color-steel)" strokeWidth={1.5} />
+      <line x1={0} y1={-14} x2={0} y2={-18} stroke="var(--color-steel)" strokeWidth={1.5} />
+      <line x1={0} y1={14} x2={0} y2={18} stroke="var(--color-steel)" strokeWidth={1.5} />
+      <text
+        y={30}
+        textAnchor="middle"
+        fill="var(--color-text-muted)"
+        fontSize={9}
+        fontFamily="var(--font-mono)"
+        fontWeight={500}
+        style={{ pointerEvents: 'none' }}
+      >
+        {shaft.name}
+      </text>
     </g>
   );
 }

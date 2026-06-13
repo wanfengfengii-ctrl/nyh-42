@@ -27,7 +27,12 @@ export function saveSingleScheme(scheme: Scheme): void {
   if (idx >= 0) {
     schemes[idx] = { ...scheme, updatedAt: Date.now() };
   } else {
-    schemes.push({ ...scheme, createdAt: Date.now(), updatedAt: Date.now() });
+    const nameIdx = schemes.findIndex((s) => s.name === scheme.name);
+    if (nameIdx >= 0) {
+      schemes[nameIdx] = { ...scheme, id: schemes[nameIdx].id, createdAt: schemes[nameIdx].createdAt, updatedAt: Date.now() };
+    } else {
+      schemes.push({ ...scheme, createdAt: Date.now(), updatedAt: Date.now() });
+    }
   }
   saveSchemes(schemes);
 }

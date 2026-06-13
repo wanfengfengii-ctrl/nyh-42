@@ -1,17 +1,21 @@
 import { Text, Tooltip, Stack } from '@mantine/core';
-import { Sun, Orbit, Cog } from 'lucide-react';
+import { Sun, Orbit, Cog, CircleDot } from 'lucide-react';
 import type { GearType } from '@/types';
 
+type ItemKind = 'gear' | 'shaft';
+
 interface ComponentItem {
-  type: GearType;
+  kind: ItemKind;
+  type?: GearType;
   label: string;
   description: string;
   icon: React.ReactNode;
-  defaultTeeth: number;
+  defaultTeeth?: number;
 }
 
 const COMPONENTS: ComponentItem[] = [
   {
+    kind: 'gear',
     type: 'sun',
     label: '太阳轮',
     description: '中心驱动齿轮',
@@ -19,6 +23,7 @@ const COMPONENTS: ComponentItem[] = [
     defaultTeeth: 30,
   },
   {
+    kind: 'gear',
     type: 'planet',
     label: '行星轮',
     description: '环绕运转的齿轮',
@@ -26,29 +31,46 @@ const COMPONENTS: ComponentItem[] = [
     defaultTeeth: 20,
   },
   {
+    kind: 'gear',
     type: 'shaft',
     label: '传动齿轮',
     description: '同轴传动齿轮',
     icon: <Cog size={20} />,
     defaultTeeth: 20,
   },
+  {
+    kind: 'shaft',
+    label: '传动轴',
+    description: '可安装多个齿轮的转轴',
+    icon: <CircleDot size={20} />,
+  },
 ];
 
 interface ComponentPanelProps {
   onAddGear: (type: GearType, x: number, y: number) => void;
+  onAddShaft: (x: number, y: number) => void;
   canvasCenter: { x: number; y: number };
 }
 
-export default function ComponentPanel({ onAddGear, canvasCenter }: ComponentPanelProps) {
-  const handleDragStart = (e: React.DragEvent, type: GearType) => {
-    e.dataTransfer.setData('gearType', type);
+export default function ComponentPanel({ onAddGear, onAddShaft, canvasCenter }: ComponentPanelProps) {
+  const handleDragStart = (e: React.DragEvent, item: ComponentItem) => {
+    e.dataTransfer.setData('itemKind', item.kind);
+    if (item.kind === 'gear' && item.type) {
+      e.dataTransfer.setData('gearType', item.type);
+    }
     e.dataTransfer.effectAllowed = 'copy';
   };
 
-  const handleClick = (type: GearType) => {
+  const handleClick = (item: ComponentItem) => {
     const offsetX = (Math.random() - 0.5) * 100;
     const offsetY = (Math.random() - 0.5) * 100;
-    onAddGear(type, canvasCenter.x + offsetX, canvasCenter.y + offsetY);
+    const x = canvasCenter.x + offsetX;
+    const y = canvasCenter.y + offsetY;
+    if (item.kind === 'gear' && item.type) {
+      onAddGear(item.type, x, y);
+    } else if (item.kind === 'shaft') {
+      onAddShaft(x, y);
+    }
   };
 
   return (
@@ -78,12 +100,12 @@ export default function ComponentPanel({ onAddGear, canvasCenter }: ComponentPan
         组件库
       </Text>
 
-      {COMPONENTS.map((comp) => (
-        <Tooltip key={comp.type} label={comp.description} position="right">
+      {COMPONENTS.map((comp, idx) => (
+        <Tooltip key={idx} label={comp.description} position="right">
           <div
             draggable
-            onDragStart={(e) => handleDragStart(e, comp.type)}
-            onClick={() => handleClick(comp.type)}
+            onDragStart={(e) => handleDragStart(e, comp)}
+            onClick={() => handleClick(comp)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -109,13 +131,13 @@ export default function ComponentPanel({ onAddGear, canvasCenter }: ComponentPan
               (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
             }}
           >
-            <div style={{ color: 'var(--color-copper)' }}>{comp.icon}</div>
+            <div style={{ color: comp.kind === 'shaft' ? 'var(--color-steel)' : 'var(--color-copper)' }}>{comp.icon}</div>
             <Stack gap={0}>
               <Text size="xs" fw={600} style={{ lineHeight: 1.2 }}>
                 {comp.label}
               </Text>
               <Text size="xs" style={{ color: 'var(--color-text-muted)', fontSize: 9 }}>
-                默认 {comp.defaultTeeth} 齿
+                {comp.defaultTeeth ? `默认 ${comp.defaultTeeth} 齿` : '转轴实体'}
               </Text>
             </Stack>
           </div>
@@ -144,7 +166,7 @@ export default function ComponentPanel({ onAddGear, canvasCenter }: ComponentPan
             · 点击齿轮选中编辑
           </Text>
           <Text size="xs" style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>
-            · 从齿轮边缘拖线创建啮合
+            · 点击齿轮端口创建连接
           </Text>
           <Text size="xs" style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>
             · Delete 键删除选中项

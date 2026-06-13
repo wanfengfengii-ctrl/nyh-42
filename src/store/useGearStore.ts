@@ -44,9 +44,11 @@ interface GearStore {
   isCreatingMesh: boolean;
   meshSourceId: string | null;
   pendingMeshType: MeshType;
+  mousePos: { x: number; y: number };
   savedSchemes: Scheme[];
   validation: ValidationResult;
   schemeName: string;
+  currentSchemeId: string | null;
 
   addGear: (type: GearType, x: number, y: number) => void;
   updateGear: (id: string, updates: Partial<Gear>) => void;
@@ -62,6 +64,7 @@ interface GearStore {
   completeMesh: (targetId: string) => void;
   removeMesh: (id: string) => void;
   selectMesh: (id: string | null) => void;
+  setMousePos: (pos: { x: number; y: number }) => void;
 
   setDriver: (id: string) => void;
   setDriverSpeed: (speed: number) => void;
@@ -98,9 +101,11 @@ export const useGearStore = create<GearStore>((set, get) => ({
   isCreatingMesh: false,
   meshSourceId: null,
   pendingMeshType: 'mesh',
+  mousePos: { x: 0, y: 0 },
   savedSchemes: loadSchemes(),
   validation: { isValid: false, errors: [] },
   schemeName: '未命名方案',
+  currentSchemeId: null,
 
   addGear: (type, x, y) => {
     const state = get();
@@ -240,6 +245,10 @@ export const useGearStore = create<GearStore>((set, get) => ({
     set({ selectedMeshId: id, selectedGearId: null });
   },
 
+  setMousePos: (pos) => {
+    set({ mousePos: pos });
+  },
+
   setDriver: (id) => {
     set((s) => ({
       driverId: id,
@@ -300,6 +309,7 @@ export const useGearStore = create<GearStore>((set, get) => ({
       meshSourceId: null,
       schemeName: '未命名方案',
       validation: { isValid: false, errors: [] },
+      currentSchemeId: null,
     });
   },
 
@@ -319,6 +329,7 @@ export const useGearStore = create<GearStore>((set, get) => ({
         isCreatingMesh: false,
         meshSourceId: null,
         schemeName: scheme.name,
+        currentSchemeId: scheme.id,
       });
       get().validate();
     }
@@ -327,19 +338,26 @@ export const useGearStore = create<GearStore>((set, get) => ({
   saveCurrentScheme: () => {
     const s = get();
     if (!s.validation.isValid) return false;
+    const schemes = loadSchemes();
+    let schemeId = s.currentSchemeId;
+    if (!schemeId) {
+      const existingByName = schemes.find((sc) => sc.name === s.schemeName);
+      schemeId = existingByName?.id || uuidv4();
+    }
+    const existingScheme = schemes.find((sc) => sc.id === schemeId);
     const scheme: Scheme = {
-      id: uuidv4(),
+      id: schemeId,
       name: s.schemeName,
       gears: s.gears,
       shafts: s.shafts,
       meshes: s.meshes,
       driverId: s.driverId,
       driverSpeed: s.driverSpeed,
-      createdAt: Date.now(),
+      createdAt: existingScheme?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
     saveSingleScheme(scheme);
-    set({ savedSchemes: loadSchemes() });
+    set({ savedSchemes: loadSchemes(), currentSchemeId: schemeId });
     return true;
   },
 

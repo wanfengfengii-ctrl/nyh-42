@@ -12,6 +12,7 @@ export default function Home() {
   useAnimation();
 
   const addGear = useGearStore((s) => s.addGear);
+  const addShaft = useGearStore((s) => s.addShaft);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [canvasCenter, setCanvasCenter] = useState({ x: 0, y: 0 });
 
@@ -31,12 +32,16 @@ export default function Home() {
     addGear(type, x, y);
   };
 
+  const handleAddShaft = (x: number, y: number) => {
+    addShaft(x, y);
+  };
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Toolbar />
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <ComponentPanel onAddGear={handleAddGear} canvasCenter={canvasCenter} />
+        <ComponentPanel onAddGear={handleAddGear} onAddShaft={handleAddShaft} canvasCenter={canvasCenter} />
 
         <div ref={canvasContainerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, position: 'relative' }}>
