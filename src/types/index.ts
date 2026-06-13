@@ -130,3 +130,85 @@ export interface SnapTarget {
   y: number;
   distance: number;
 }
+
+export type CelestialBody =
+  | 'sun'
+  | 'moon'
+  | 'mercury'
+  | 'venus'
+  | 'earth'
+  | 'mars'
+  | 'jupiter'
+  | 'saturn'
+  | 'custom';
+
+export interface CelestialPeriod {
+  body: CelestialBody;
+  name: string;
+  periodDays: number;
+  description: string;
+}
+
+export interface ReverseSearchParams {
+  targetPeriodDays: number;
+  targetDirection: RotationDirection;
+  errorTolerancePercent: number;
+  maxStages: number;
+  minTeeth: number;
+  maxTeeth: number;
+  maxDiameter: number;
+  driverSpeedRpm: number;
+  preferFewerStages: boolean;
+  preferSmallerSize: boolean;
+  avoidSelfLock: boolean;
+}
+
+export interface GearStage {
+  driverTeeth: number;
+  drivenTeeth: number;
+  ratio: number;
+}
+
+export interface CandidateScheme {
+  id: string;
+  stages: GearStage[];
+  totalRatio: number;
+  actualPeriodDays: number;
+  theoreticalErrorPercent: number;
+  stageCount: number;
+  totalGearCount: number;
+  estimatedDiameter: number;
+  hasSelfLock: boolean;
+  directionConflict: boolean;
+  outputDirection: RotationDirection;
+  score: number;
+  gears: Gear[];
+  shafts: Shaft[];
+  meshes: MeshRelation[];
+  driverId: string;
+  driverSpeed: number;
+}
+
+export interface ReverseSearchState {
+  isOpen: boolean;
+  isSearching: boolean;
+  searchProgress: number;
+  params: ReverseSearchParams;
+  candidates: CandidateScheme[];
+  selectedCandidateIds: string[];
+  sortBy: 'error' | 'stages' | 'size' | 'score';
+  filterSelfLock: boolean;
+  filterDirectionConflict: boolean;
+  maxResults: number;
+}
+
+export const CELESTIAL_PERIODS: CelestialPeriod[] = [
+  { body: 'sun', name: '太阳日', periodDays: 1, description: '地球自转一周（24小时）' },
+  { body: 'moon', name: '月球朔望月', periodDays: 29.53059, description: '月相变化周期' },
+  { body: 'mercury', name: '水星公转', periodDays: 87.9691, description: '水星绕太阳一周' },
+  { body: 'venus', name: '金星公转', periodDays: 224.701, description: '金星绕太阳一周' },
+  { body: 'earth', name: '地球回归年', periodDays: 365.2422, description: '地球绕太阳一周' },
+  { body: 'mars', name: '火星公转', periodDays: 686.98, description: '火星绕太阳一周' },
+  { body: 'jupiter', name: '木星公转', periodDays: 4332.59, description: '木星绕太阳一周（约11.86年）' },
+  { body: 'saturn', name: '土星公转', periodDays: 10759.22, description: '土星绕太阳一周（约29.46年）' },
+];

@@ -14,10 +14,14 @@ import type {
   ConflictReport,
   ChainRecommendation,
   SnapTarget,
+  ReverseSearchParams,
+  ReverseSearchState,
+  CandidateScheme,
 } from '@/types';
 import { validateAll, generateConflictReport } from '@/engine/validation';
 import { computeShaftGroups, findSnapTarget, canMountGearToShaft } from '@/engine/shaftAssembly';
 import { recommendChains } from '@/engine/chainRecommender';
+import { runReverseSearch, sortCandidates, filterCandidates } from '@/engine/reverseGearSearch';
 import { loadSchemes, saveSingleScheme, deleteScheme } from '@/utils/storage';
 
 const GEAR_COLORS = [
@@ -59,6 +63,7 @@ interface GearStore {
   conflictReport: ConflictReport | null;
   chainRecommendations: ChainRecommendation[];
   activeSnapTarget: SnapTarget | null;
+  reverseSearch: ReverseSearchState;
 
   addGear: (type: GearType, x: number, y: number) => void;
   updateGear: (id: string, updates: Partial<Gear>) => void;
