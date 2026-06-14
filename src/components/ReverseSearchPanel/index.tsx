@@ -17,6 +17,7 @@ import {
   Checkbox,
   Table,
   Card,
+  Collapse,
 } from '@mantine/core';
 import {
   Wand2,
@@ -37,10 +38,33 @@ import {
   X,
   ArrowRight,
   AlertTriangle,
+  Hammer,
+  Wrench,
+  Scale,
+  Heart,
+  Shield,
+  Cog,
+  Factory,
+  Info,
+  Weight,
+  Clock,
 } from 'lucide-react';
 import { useGearStore } from '@/store/useGearStore';
-import { CELESTIAL_PERIODS, type CandidateScheme } from '@/types';
+import {
+  CELESTIAL_PERIODS,
+  type CandidateScheme,
+  type GearMaterial,
+  type MachiningPrecision,
+  MATERIAL_PROPERTIES,
+  PRECISION_LEVELS,
+} from '@/types';
 import { targetPeriodToRatio } from '@/engine/reverseGearSearch';
+import {
+  DIFFICULTY_LABELS,
+  DIFFICULTY_COLORS,
+  RISK_LABELS,
+  RISK_COLORS,
+} from '@/engine/manufacturingAssessment';
 
 export default function ReverseSearchPanel() {
   const reverseSearch = useGearStore((s) => s.reverseSearch);
@@ -224,7 +248,9 @@ export default function ReverseSearchPanel() {
 
             <div>
               <Text size="xs" fw={700} style={{ color: 'var(--color-copper)', marginBottom: 6 }}>
-                <Group gap={4}><Sparkles size={12} /> 搜索偏好</Group>
+                <Group gap={4}>
+                  <Sparkles size={12} /> 搜索偏好
+                </Group>
               </Text>
               <Stack gap={4}>
                 <Switch
@@ -249,6 +275,196 @@ export default function ReverseSearchPanel() {
                   styles={{ label: { fontSize: 11 } }}
                 />
               </Stack>
+            </div>
+
+            <Divider color="var(--color-border)" />
+
+            <div>
+              <Group justify="space-between" mb={6}>
+                <Text size="xs" fw={700} style={{ color: 'var(--color-copper)' }}>
+                  <Group gap={4}>
+                    <Factory size={12} /> 制造约束评估
+                  </Group>
+                </Text>
+                <Switch
+                  size="xs"
+                  checked={reverseSearch.params.enableManufacturingAssessment}
+                  onChange={(e) => setReverseSearchParams({ enableManufacturingAssessment: e.currentTarget.checked })}
+                />
+              </Group>
+
+              <Collapse in={reverseSearch.params.enableManufacturingAssessment}>
+                <Stack gap={6}>
+                  <Switch
+                    size="xs"
+                    label="优先高可制造性方案"
+                    checked={reverseSearch.params.preferManufacturable}
+                    onChange={(e) => setReverseSearchParams({ preferManufacturable: e.currentTarget.checked })}
+                    styles={{ label: { fontSize: 11 } }}
+                  />
+
+                  <Divider color="var(--color-border)" />
+
+                  <Group gap={6} grow>
+                    <NumberInput
+                      size="xs"
+                      label="模数 m (mm)"
+                      value={reverseSearch.params.manufacturingConstraints.module}
+                      onChange={(v) => setReverseSearchParams({
+                        manufacturingConstraints: {
+                          ...reverseSearch.params.manufacturingConstraints,
+                          module: Number(v) || 1,
+                        },
+                      })}
+                      min={0.3}
+                      max={20}
+                      step={0.5}
+                      decimalScale={2}
+                      styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' }, input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
+                    />
+                    <NumberInput
+                      size="xs"
+                      label="轴径 d (mm)"
+                      value={reverseSearch.params.manufacturingConstraints.shaftDiameter}
+                      onChange={(v) => setReverseSearchParams({
+                        manufacturingConstraints: {
+                          ...reverseSearch.params.manufacturingConstraints,
+                          shaftDiameter: Number(v) || 5,
+                        },
+                      })}
+                      min={1}
+                      max={100}
+                      step={1}
+                      decimalScale={1}
+                      styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' }, input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
+                    />
+                  </Group>
+
+                  <Group gap={6} grow>
+                    <NumberInput
+                      size="xs"
+                      label="最小齿厚 (mm)"
+                      value={reverseSearch.params.manufacturingConstraints.minToothThickness}
+                      onChange={(v) => setReverseSearchParams({
+                        manufacturingConstraints: {
+                          ...reverseSearch.params.manufacturingConstraints,
+                          minToothThickness: Number(v) || 0.5,
+                        },
+                      })}
+                      min={0.1}
+                      max={10}
+                      step={0.1}
+                      decimalScale={2}
+                      styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' }, input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
+                    />
+                    <NumberInput
+                      size="xs"
+                      label="装配间隙 (mm)"
+                      value={reverseSearch.params.manufacturingConstraints.assemblyClearance}
+                      onChange={(v) => setReverseSearchParams({
+                        manufacturingConstraints: {
+                          ...reverseSearch.params.manufacturingConstraints,
+                          assemblyClearance: Number(v) || 0.05,
+                        },
+                      })}
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      decimalScale={3}
+                      styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' }, input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
+                    />
+                  </Group>
+
+                  <Select
+                    size="xs"
+                    label="加工精度等级"
+                    value={reverseSearch.params.manufacturingConstraints.machiningPrecision}
+                    onChange={(v) => v && setReverseSearchParams({
+                      manufacturingConstraints: {
+                        ...reverseSearch.params.manufacturingConstraints,
+                        machiningPrecision: v as MachiningPrecision,
+                      },
+                    })}
+                    data={(Object.keys(PRECISION_LEVELS) as MachiningPrecision[]).map((k) => ({
+                      value: k,
+                      label: PRECISION_LEVELS[k].name,
+                    }))}
+                    styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' }, input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
+                  />
+
+                  <Select
+                    size="xs"
+                    label="齿轮材料"
+                    value={reverseSearch.params.manufacturingConstraints.material}
+                    onChange={(v) => v && setReverseSearchParams({
+                      manufacturingConstraints: {
+                        ...reverseSearch.params.manufacturingConstraints,
+                        material: v as GearMaterial,
+                      },
+                    })}
+                    data={(Object.keys(MATERIAL_PROPERTIES) as GearMaterial[]).map((k) => ({
+                      value: k,
+                      label: MATERIAL_PROPERTIES[k].name,
+                    }))}
+                    styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' }, input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
+                  />
+
+                  {reverseSearch.params.manufacturingConstraints.material && (
+                    <div
+                      style={{
+                        padding: '6px 8px',
+                        background: 'var(--color-bg-tertiary)',
+                        borderRadius: 4,
+                        border: '1px solid var(--color-border)',
+                      }}
+                    >
+                      <Text size="xs" fw={600} style={{ color: 'var(--color-steel)', marginBottom: 2 }}>
+                        {MATERIAL_PROPERTIES[reverseSearch.params.manufacturingConstraints.material].name}
+                      </Text>
+                      <Text size="xs" style={{ color: 'var(--color-text-muted)', fontSize: 10, lineHeight: 1.4 }}>
+                        密度: {MATERIAL_PROPERTIES[reverseSearch.params.manufacturingConstraints.material].density} g/cm³ |
+                        强度: {MATERIAL_PROPERTIES[reverseSearch.params.manufacturingConstraints.material].tensileStrength} MPa
+                      </Text>
+                      <Text size="xs" style={{ color: 'var(--color-text-muted)', fontSize: 10 }}>
+                        {MATERIAL_PROPERTIES[reverseSearch.params.manufacturingConstraints.material].typicalApplications}
+                      </Text>
+                    </div>
+                  )}
+
+                  <Group gap={6} grow>
+                    <NumberInput
+                      size="xs"
+                      label="允许总重 (g)"
+                      value={reverseSearch.params.manufacturingConstraints.maxTotalWeight}
+                      onChange={(v) => setReverseSearchParams({
+                        manufacturingConstraints: {
+                          ...reverseSearch.params.manufacturingConstraints,
+                          maxTotalWeight: Number(v) || 500,
+                        },
+                      })}
+                      min={10}
+                      max={100000}
+                      step={50}
+                      styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' }, input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
+                    />
+                    <NumberInput
+                      size="xs"
+                      label="齿宽系数 (×m)"
+                      value={reverseSearch.params.manufacturingConstraints.faceWidthFactor}
+                      onChange={(v) => setReverseSearchParams({
+                        manufacturingConstraints: {
+                          ...reverseSearch.params.manufacturingConstraints,
+                          faceWidthFactor: Number(v) || 10,
+                        },
+                      })}
+                      min={4}
+                      max={30}
+                      step={1}
+                      styles={{ label: { fontSize: 10, color: 'var(--color-text-muted)' }, input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
+                    />
+                  </Group>
+                </Stack>
+              </Collapse>
             </div>
 
             <Divider color="var(--color-border)" />
@@ -296,14 +512,17 @@ export default function ReverseSearchPanel() {
               <Select
                 size="xs"
                 value={reverseSearch.sortBy}
-                onChange={(v) => v && setReverseSearchSortBy(v as 'error' | 'stages' | 'size' | 'score')}
+                onChange={(v) => v && setReverseSearchSortBy(v as any)}
                 data={[
+                  { value: 'manufacturability', label: '制造可行性' },
                   { value: 'score', label: '综合评分' },
+                  { value: 'weight', label: '重量最轻' },
+                  { value: 'lifespan', label: '寿命最优' },
                   { value: 'error', label: '误差最小' },
                   { value: 'stages', label: '级数最少' },
                   { value: 'size', label: '体积最小' },
                 ]}
-                style={{ width: 100 }}
+                style={{ width: 120 }}
                 styles={{ input: { background: 'var(--color-bg-tertiary)', fontSize: 11 } }}
               />
             </Group>
@@ -321,6 +540,13 @@ export default function ReverseSearchPanel() {
                 label="排除方向冲突"
                 checked={reverseSearch.filterDirectionConflict}
                 onChange={(e) => setReverseSearchFilter('filterDirectionConflict', e.currentTarget.checked)}
+                styles={{ label: { fontSize: 11 } }}
+              />
+              <Checkbox
+                size="xs"
+                label="排除超重"
+                checked={reverseSearch.filterOverweight}
+                onChange={(e) => setReverseSearchFilter('filterOverweight', e.currentTarget.checked)}
                 styles={{ label: { fontSize: 11 } }}
               />
             </Group>
@@ -491,6 +717,7 @@ function CandidateCard({
   targetPeriodDays: number;
 }) {
   const errorColor = candidate.theoreticalErrorPercent < 0.1 ? '#10b981' : candidate.theoreticalErrorPercent < 1 ? '#f59e0b' : '#ef4444';
+  const mfg = candidate.manufacturingAssessment;
 
   return (
     <Card
@@ -553,9 +780,24 @@ function CandidateCard({
                 方向冲突
               </Badge>
             )}
+            {mfg && mfg.weightEstimate.overweight && (
+              <Badge size="xs" variant="light" color="red" leftSection={<Weight size={10} />}>
+                超重
+              </Badge>
+            )}
             <Badge size="xs" variant="light" color="cyan">
               {candidate.totalGearCount} 齿轮
             </Badge>
+            {mfg && (
+              <Badge
+                size="xs"
+                variant="light"
+                color={mfg.manufacturingDifficulty.score >= 70 ? 'green' : mfg.manufacturingDifficulty.score >= 50 ? 'yellow' : 'red'}
+                leftSection={<Hammer size={10} />}
+              >
+                {DIFFICULTY_LABELS[mfg.manufacturingDifficulty.level]}
+              </Badge>
+            )}
           </Group>
           <Group gap={16}>
             <div>
@@ -582,6 +824,55 @@ function CandidateCard({
                 {candidate.score.toFixed(1)}
               </Text>
             </div>
+            {mfg && (
+              <>
+                <div>
+                  <Text size="xs" style={{ color: 'var(--color-text-muted)' }}>
+                    <Group gap={2}><Weight size={9} /> 估算重量</Group>
+                  </Text>
+                  <Text
+                    size="sm"
+                    fw={700}
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      color: mfg.weightEstimate.overweight ? '#ef4444' : '#10b981',
+                    }}
+                  >
+                    {mfg.weightEstimate.totalWeightGrams.toFixed(0)} g
+                  </Text>
+                </div>
+                <div>
+                  <Text size="xs" style={{ color: 'var(--color-text-muted)' }}>
+                    <Group gap={2}><Heart size={9} /> 寿命</Group>
+                  </Text>
+                  <Text
+                    size="sm"
+                    fw={700}
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      color: RISK_COLORS[mfg.lifespanRisk.level],
+                    }}
+                  >
+                    {RISK_LABELS[mfg.lifespanRisk.level]}
+                  </Text>
+                </div>
+                <div>
+                  <Text size="xs" style={{ color: 'var(--color-text-muted)' }}>
+                    <Group gap={2}><Shield size={9} /> 装配</Group>
+                  </Text>
+                  <Text
+                    size="sm"
+                    fw={700}
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      color: RISK_COLORS[mfg.assemblyRisk.level],
+                    }}
+                  >
+                    {RISK_LABELS[mfg.assemblyRisk.level]}
+                  </Text>
+                </div>
+              </>
+            )}
           </Group>
         </div>
 
@@ -630,40 +921,232 @@ function CandidateCard({
               ))}
             </Group>
 
-            <Table mt={10} withTableBorder styles={{ table: { fontSize: 11 } }}>
-              <thead>
-                <tr>
-                  <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>指标</th>
-                  <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>目标值</th>
-                  <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>实际值</th>
-                  <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>偏差</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style={{ padding: '4px 8px' }}>周期</td>
-                  <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{targetPeriodDays.toFixed(4)} 天</td>
-                  <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{candidate.actualPeriodDays.toFixed(4)} 天</td>
-                  <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)', color: errorColor }}>
-                    {candidate.theoreticalErrorPercent.toFixed(4)}%
-                  </td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '4px 8px' }}>传动比</td>
-                  <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>1 : {targetPeriodToRatio(targetPeriodDays, candidate.driverSpeed).toFixed(4)}</td>
-                  <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>1 : {candidate.totalRatio.toFixed(4)}</td>
-                  <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>-</td>
-                </tr>
-                <tr>
-                  <td style={{ padding: '4px 8px' }}>自锁检测</td>
-                  <td style={{ padding: '4px 8px' }}>无</td>
-                  <td style={{ padding: '4px 8px', color: candidate.hasSelfLock ? '#ef4444' : '#10b981' }}>
-                    {candidate.hasSelfLock ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
-                  </td>
-                  <td style={{ padding: '4px 8px' }}>-</td>
-                </tr>
-              </tbody>
-            </Table>
+            {mfg && (
+              <div style={{ marginTop: 12 }}>
+                <Group mb={8}>
+                  <Text size="xs" fw={700} style={{ color: 'var(--color-copper)' }}>
+                    <Factory size={12} style={{ marginRight: 4 }} />
+                    制造可行性评估
+                  </Text>
+                  <Badge
+                    size="xs"
+                    style={{
+                      background: DIFFICULTY_COLORS[mfg.feasibilityLevel],
+                      color: '#fff',
+                    }}
+                  >
+                    综合: {DIFFICULTY_LABELS[mfg.feasibilityLevel]} ({mfg.overallScore.toFixed(0)}分)
+                  </Badge>
+                </Group>
+
+                <Table withTableBorder styles={{ table: { fontSize: 11 } }} mb={10}>
+                  <thead>
+                    <tr>
+                      <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px', width: 90 }}>评估维度</th>
+                      <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px', width: 70 }}>评分</th>
+                      <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px', width: 80 }}>等级</th>
+                      <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>关键指标</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: '4px 8px' }}>
+                        <Group gap={4}><Hammer size={12} /> 制造难度</Group>
+                      </td>
+                      <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{mfg.manufacturingDifficulty.score.toFixed(0)}</td>
+                      <td style={{ padding: '4px 8px', color: DIFFICULTY_COLORS[mfg.manufacturingDifficulty.level] }}>
+                        {DIFFICULTY_LABELS[mfg.manufacturingDifficulty.level]}
+                      </td>
+                      <td style={{ padding: '4px 8px', color: 'var(--color-text-muted)', fontSize: 10 }}>
+                        齿加工:{mfg.manufacturingDifficulty.toothMachiningScore.toFixed(0)} |
+                        精度:{mfg.manufacturingDifficulty.precisionRequirementScore.toFixed(0)} |
+                        材料:{mfg.manufacturingDifficulty.materialHardnessScore.toFixed(0)} |
+                        双联:{mfg.manufacturingDifficulty.compoundGearScore.toFixed(0)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '4px 8px' }}>
+                        <Group gap={4}><Wrench size={12} /> 装配风险</Group>
+                      </td>
+                      <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{mfg.assemblyRisk.score.toFixed(0)}</td>
+                      <td style={{ padding: '4px 8px', color: RISK_COLORS[mfg.assemblyRisk.level] }}>
+                        {RISK_LABELS[mfg.assemblyRisk.level]}
+                      </td>
+                      <td style={{ padding: '4px 8px', color: 'var(--color-text-muted)', fontSize: 10 }}>
+                        间隙配合:{mfg.assemblyRisk.clearanceFitScore.toFixed(0)} |
+                        轴兼容:{mfg.assemblyRisk.shaftCompatibilityScore.toFixed(0)} |
+                        公差累积:{mfg.assemblyRisk.toleranceAccumulationScore.toFixed(0)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '4px 8px' }}>
+                        <Group gap={4}><Scale size={12} /> 重量估算</Group>
+                      </td>
+                      <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>
+                        {mfg.weightEstimate.overweight ? '⚠' : '✓'}
+                      </td>
+                      <td style={{ padding: '4px 8px', color: mfg.weightEstimate.overweight ? '#ef4444' : '#10b981' }}>
+                        {mfg.weightEstimate.totalWeightGrams.toFixed(0)} g / {mfg.weightEstimate.weightLimit}g
+                      </td>
+                      <td style={{ padding: '4px 8px', color: 'var(--color-text-muted)', fontSize: 10 }}>
+                        齿轮重: {(mfg.weightEstimate.totalWeightGrams - mfg.weightEstimate.shaftWeightGrams).toFixed(0)}g |
+                        轴系重: {mfg.weightEstimate.shaftWeightGrams.toFixed(0)}g |
+                        {mfg.weightEstimate.overweight
+                          ? `超重 ${((mfg.weightEstimate.totalWeightGrams / mfg.weightEstimate.weightLimit - 1) * 100).toFixed(1)}%`
+                          : `使用率 ${((mfg.weightEstimate.totalWeightGrams / mfg.weightEstimate.weightLimit) * 100).toFixed(1)}%`
+                        }
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '4px 8px' }}>
+                        <Group gap={4}><Heart size={12} /> 寿命风险</Group>
+                      </td>
+                      <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{mfg.lifespanRisk.score.toFixed(0)}</td>
+                      <td style={{ padding: '4px 8px', color: RISK_COLORS[mfg.lifespanRisk.level] }}>
+                        {RISK_LABELS[mfg.lifespanRisk.level]}
+                      </td>
+                      <td style={{ padding: '4px 8px', color: 'var(--color-text-muted)', fontSize: 10 }}>
+                        接触应力:{mfg.lifespanRisk.contactStressScore.toFixed(0)} |
+                        弯曲应力:{mfg.lifespanRisk.bendingStressScore.toFixed(0)} |
+                        耐磨:{mfg.lifespanRisk.wearResistanceScore.toFixed(0)} |
+                        疲劳:{mfg.lifespanRisk.fatigueLifeScore.toFixed(0)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </Table>
+
+                {(mfg.manufacturingDifficulty.details.length > 0 ||
+                  mfg.assemblyRisk.details.length > 0 ||
+                  mfg.lifespanRisk.details.length > 0) && (
+                  <div style={{ marginBottom: 10 }}>
+                    <Text size="xs" fw={600} style={{ color: 'var(--color-steel)', marginBottom: 4 }}>
+                      <Info size={11} style={{ marginRight: 4 }} />
+                      评估详情
+                    </Text>
+                    <Stack gap={2}>
+                      {[...mfg.manufacturingDifficulty.details.slice(0, 3),
+                        ...mfg.assemblyRisk.details.slice(0, 2),
+                        ...mfg.lifespanRisk.details.slice(0, 2),
+                      ].slice(0, 6).map((detail, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            padding: '3px 8px',
+                            fontSize: 10,
+                            color: 'var(--color-text-muted)',
+                            background: 'var(--color-bg-tertiary)',
+                            borderRadius: 3,
+                            borderLeft: '2px solid var(--color-copper)',
+                          }}
+                        >
+                          • {detail}
+                        </div>
+                      ))}
+                    </Stack>
+                  </div>
+                )}
+
+                {mfg.recommendations.length > 0 && (
+                  <div>
+                    <Text size="xs" fw={600} style={{ color: '#10b981', marginBottom: 4 }}>
+                      <Sparkles size={11} style={{ marginRight: 4 }} />
+                      优化建议
+                    </Text>
+                    <Stack gap={2}>
+                      {mfg.recommendations.map((rec, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: 10,
+                            color: 'var(--color-text)',
+                            background: 'rgba(16, 185, 129, 0.08)',
+                            borderRadius: 4,
+                            border: '1px solid rgba(16, 185, 129, 0.2)',
+                          }}
+                        >
+                          💡 {rec}
+                        </div>
+                      ))}
+                    </Stack>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!mfg && (
+              <Table mt={10} withTableBorder styles={{ table: { fontSize: 11 } }}>
+                <thead>
+                  <tr>
+                    <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>指标</th>
+                    <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>目标值</th>
+                    <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>实际值</th>
+                    <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>偏差</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: '4px 8px' }}>周期</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{targetPeriodDays.toFixed(4)} 天</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{candidate.actualPeriodDays.toFixed(4)} 天</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)', color: errorColor }}>
+                      {candidate.theoreticalErrorPercent.toFixed(4)}%
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '4px 8px' }}>传动比</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>1 : {targetPeriodToRatio(targetPeriodDays, candidate.driverSpeed).toFixed(4)}</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>1 : {candidate.totalRatio.toFixed(4)}</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>-</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '4px 8px' }}>自锁检测</td>
+                    <td style={{ padding: '4px 8px' }}>无</td>
+                    <td style={{ padding: '4px 8px', color: candidate.hasSelfLock ? '#ef4444' : '#10b981' }}>
+                      {candidate.hasSelfLock ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
+                    </td>
+                    <td style={{ padding: '4px 8px' }}>-</td>
+                  </tr>
+                </tbody>
+              </Table>
+            )}
+
+            {mfg && (
+              <Table mt={10} withTableBorder styles={{ table: { fontSize: 11 } }}>
+                <thead>
+                  <tr>
+                    <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>指标</th>
+                    <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>目标值</th>
+                    <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>实际值</th>
+                    <th style={{ background: 'var(--color-bg-tertiary)', fontSize: 10, padding: '4px 8px' }}>偏差</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: '4px 8px' }}>周期</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{targetPeriodDays.toFixed(4)} 天</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>{candidate.actualPeriodDays.toFixed(4)} 天</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)', color: errorColor }}>
+                      {candidate.theoreticalErrorPercent.toFixed(4)}%
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '4px 8px' }}>传动比</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>1 : {targetPeriodToRatio(targetPeriodDays, candidate.driverSpeed).toFixed(4)}</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>1 : {candidate.totalRatio.toFixed(4)}</td>
+                    <td style={{ padding: '4px 8px', fontFamily: 'var(--font-mono)' }}>-</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '4px 8px' }}>自锁检测</td>
+                    <td style={{ padding: '4px 8px' }}>无</td>
+                    <td style={{ padding: '4px 8px', color: candidate.hasSelfLock ? '#ef4444' : '#10b981' }}>
+                      {candidate.hasSelfLock ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
+                    </td>
+                    <td style={{ padding: '4px 8px' }}>-</td>
+                  </tr>
+                </tbody>
+              </Table>
+            )}
           </div>
         </>
       )}
@@ -678,6 +1161,7 @@ function CandidateCompareTable({
   candidates: CandidateScheme[];
   targetPeriodDays: number;
 }) {
+  const hasMfg = candidates.some(c => c.manufacturingAssessment);
   return (
     <Table withTableBorder striped>
       <thead>
@@ -707,6 +1191,21 @@ function CandidateCompareTable({
             </td>
           ))}
         </tr>
+        {hasMfg && (
+          <tr>
+            <td style={{ padding: '6px 10px', fontWeight: 600 }}>
+              <Group gap={4}><Factory size={12} /> 制造可行性</Group>
+            </td>
+            {candidates.map((c) => {
+              const mfg = c.manufacturingAssessment;
+              return (
+                <td key={c.id} style={{ padding: '6px 10px', textAlign: 'center', fontWeight: 700, color: mfg ? DIFFICULTY_COLORS[mfg.feasibilityLevel] : 'var(--color-text-muted)' }}>
+                  {mfg ? `${DIFFICULTY_LABELS[mfg.feasibilityLevel]} (${mfg.overallScore.toFixed(0)})` : '-'}
+                </td>
+              );
+            })}
+          </tr>
+        )}
         <tr>
           <td style={{ padding: '6px 10px', fontWeight: 600 }}>齿轮级数</td>
           {candidates.map((c) => (
@@ -755,6 +1254,66 @@ function CandidateCompareTable({
             </td>
           ))}
         </tr>
+        {hasMfg && (
+          <tr>
+            <td style={{ padding: '6px 10px', fontWeight: 600 }}>
+              <Group gap={4}><Weight size={12} /> 估算重量</Group>
+            </td>
+            {candidates.map((c) => {
+              const w = c.manufacturingAssessment?.weightEstimate;
+              return (
+                <td key={c.id} style={{ padding: '6px 10px', textAlign: 'center', fontFamily: 'var(--font-mono)', color: w?.overweight ? '#ef4444' : '#10b981' }}>
+                  {w ? `${w.totalWeightGrams.toFixed(0)} g` : '-'}
+                </td>
+              );
+            })}
+          </tr>
+        )}
+        {hasMfg && (
+          <tr>
+            <td style={{ padding: '6px 10px', fontWeight: 600 }}>
+              <Group gap={4}><Hammer size={12} /> 制造难度</Group>
+            </td>
+            {candidates.map((c) => {
+              const d = c.manufacturingAssessment?.manufacturingDifficulty;
+              return (
+                <td key={c.id} style={{ padding: '6px 10px', textAlign: 'center', color: d ? DIFFICULTY_COLORS[d.level] : 'var(--color-text-muted)' }}>
+                  {d ? `${DIFFICULTY_LABELS[d.level]} (${d.score.toFixed(0)})` : '-'}
+                </td>
+              );
+            })}
+          </tr>
+        )}
+        {hasMfg && (
+          <tr>
+            <td style={{ padding: '6px 10px', fontWeight: 600 }}>
+              <Group gap={4}><Wrench size={12} /> 装配风险</Group>
+            </td>
+            {candidates.map((c) => {
+              const a = c.manufacturingAssessment?.assemblyRisk;
+              return (
+                <td key={c.id} style={{ padding: '6px 10px', textAlign: 'center', color: a ? RISK_COLORS[a.level] : 'var(--color-text-muted)' }}>
+                  {a ? `${RISK_LABELS[a.level]} (${a.score.toFixed(0)})` : '-'}
+                </td>
+              );
+            })}
+          </tr>
+        )}
+        {hasMfg && (
+          <tr>
+            <td style={{ padding: '6px 10px', fontWeight: 600 }}>
+              <Group gap={4}><Heart size={12} /> 寿命风险</Group>
+            </td>
+            {candidates.map((c) => {
+              const l = c.manufacturingAssessment?.lifespanRisk;
+              return (
+                <td key={c.id} style={{ padding: '6px 10px', textAlign: 'center', color: l ? RISK_COLORS[l.level] : 'var(--color-text-muted)' }}>
+                  {l ? `${RISK_LABELS[l.level]} (${l.score.toFixed(0)})` : '-'}
+                </td>
+              );
+            })}
+          </tr>
+        )}
         <tr>
           <td style={{ padding: '6px 10px', fontWeight: 600 }}>输出方向</td>
           {candidates.map((c) => (
@@ -772,6 +1331,18 @@ function CandidateCompareTable({
             </td>
           ))}
         </tr>
+        {hasMfg && candidates.some(c => c.manufacturingAssessment?.weightEstimate.overweight) && (
+          <tr>
+            <td style={{ padding: '6px 10px', fontWeight: 600 }}>超重</td>
+            {candidates.map((c) => (
+              <td key={c.id} style={{ padding: '6px 10px', textAlign: 'center' }}>
+                {c.manufacturingAssessment?.weightEstimate.overweight
+                  ? <XCircle size={14} color="#ef4444" />
+                  : <CheckCircle2 size={14} color="#10b981" />}
+              </td>
+            ))}
+          </tr>
+        )}
         <tr>
           <td style={{ padding: '6px 10px', fontWeight: 600 }}>各级齿数</td>
           {candidates.map((c) => (

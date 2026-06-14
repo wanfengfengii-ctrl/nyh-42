@@ -7,9 +7,11 @@ import type {
   Shaft,
   CandidateScheme,
   ReverseSearchParams,
+  ReverseSearchSortBy,
 } from '@/types';
 import { teethToRadius } from '@/utils/gearMath';
 import { validateAll } from './validation';
+import { assessManufacturingFeasibility } from './manufacturingAssessment';
 
 const GEAR_COLORS = [
   '#d4753c',
@@ -401,12 +403,25 @@ export function scoreCandidate(
     score -= 30;
   }
 
+  if (params.enableManufacturingAssessment && candidate.manufacturingAssessment) {
+    const mfgScore = candidate.manufacturingAssessment.overallScore;
+    if (params.preferManufacturable) {
+      score = score * 0.4 + mfgScore * 0.6;
+    } else {
+      score = score * 0.6 + mfgScore * 0.4;
+    }
+  }
+
+  if (candidate.manufacturingAssessment?.weightEstimate.overweight) {
+    score -= 50;
+  }
+
   return Math.max(0, score);
 }
 
 export function sortCandidates(
   candidates: CandidateScheme[],
-  sortBy: 'error' | 'stages' | 'size' | 'score'
+  sortBy: ReverseSearchSortBy
 ): CandidateScheme[] {
   const sorted = [...candidates];
   switch (sortBy) {
@@ -422,6 +437,30 @@ export function sortCandidates(
     case 'score':
       sorted.sort((a, b) => b.score - a.score);
       break;
+    case 'manufacturability':
+      sorted.sort((a, b) => {
+        const aMfg = a.manufacturingAssessment?.overallScore ?? 0;
+        const bMfg = b.manufacturingAssessment?.overallScore ?? 0;
+        if (bMfg !== aMfg) return bMfg - aMfg;
+        return b.score - a.score;
+      });
+      break;
+    case 'weight':
+      sorted.sort((a, b) => {
+        const aW = a.manufacturingAssessment?.weightEstimate.totalWeightGrams ?? Number.MAX_SAFE_INTEGER;
+        const bW = b.manufacturingAssessment?.weightEstimate.totalWeightGrams ?? Number.MAX_SAFE_INTEGER;
+        if (aW !== bW) return aW - bW;
+        return b.score - a.score;
+      });
+      break;
+    case 'lifespan':
+      sorted.sort((a, b) => {
+        const aL = a.manufacturingAssessment?.lifespanRisk.score ?? 0;
+        const bL = b.manufacturingAssessment?.lifespanRisk.score ?? 0;
+        if (bL !== aL) return bL - aL;
+        return b.score - a.score;
+      });
+      break;
   }
   return sorted;
 }
@@ -429,11 +468,13 @@ export function sortCandidates(
 export function filterCandidates(
   candidates: CandidateScheme[],
   filterSelfLock: boolean,
-  filterDirectionConflict: boolean
+  filterDirectionConflict: boolean,
+  filterOverweight: boolean = false
 ): CandidateScheme[] {
   return candidates.filter((c) => {
     if (filterSelfLock && c.hasSelfLock) return false;
     if (filterDirectionConflict && c.directionConflict) return false;
+    if (filterOverweight && c.manufacturingAssessment?.weightEstimate.overweight) return false;
     return true;
   });
 }
@@ -499,6 +540,10 @@ export function runReverseSearch(
       driverSpeed: params.driverSpeedRpm,
     };
 
+    if (params.enableManufacturingAssessment) {
+      candidate.manufacturingAssessment = assessManufacturingFeasibility(candidate, params.manufacturingConstraints);
+    }
+
     candidate.score = scoreCandidate(candidate, params);
     candidates.push(candidate);
 
@@ -509,6 +554,6 @@ export function runReverseSearch(
 
   onProgress?.(100);
 
-  const sorted = sortCandidates(candidates, 'score');
+  const sorted = sortCandidates(candidates, params.enableManufacturingAssessment ? 'manufacturability' : 'score');
   return sorted.slice(0, params.maxResults || 50);
 }

@@ -15,6 +15,7 @@ import type {
   SnapTarget,
   ReverseSearchParams,
   ReverseSearchState,
+  ReverseSearchSortBy,
   CandidateScheme,
 } from '@/types';
 import { validateAll, generateConflictReport } from '@/engine/validation';
@@ -109,8 +110,8 @@ interface GearStore {
   setReverseSearchOpen: (open: boolean) => void;
   setReverseSearchParams: (params: Partial<ReverseSearchParams>) => void;
   runReverseGearSearch: () => Promise<void>;
-  setReverseSearchSortBy: (sortBy: ReverseSearchState['sortBy']) => void;
-  setReverseSearchFilter: (filter: 'filterSelfLock' | 'filterDirectionConflict', value: boolean) => void;
+  setReverseSearchSortBy: (sortBy: ReverseSearchSortBy) => void;
+  setReverseSearchFilter: (filter: 'filterSelfLock' | 'filterDirectionConflict' | 'filterOverweight', value: boolean) => void;
   toggleCandidateSelection: (candidateId: string) => void;
   clearCandidateSelection: () => void;
   applyCandidateScheme: (candidate: CandidateScheme) => void;
@@ -161,13 +162,26 @@ export const useGearStore = create<GearStore>((set, get) => ({
       preferSmallerSize: false,
       avoidSelfLock: true,
       maxResults: 30,
+      enableManufacturingAssessment: true,
+      preferManufacturable: true,
+      manufacturingConstraints: {
+        module: 2,
+        shaftDiameter: 12,
+        minToothThickness: 1.5,
+        machiningPrecision: 'IT8',
+        assemblyClearance: 0.05,
+        maxTotalWeight: 2000,
+        material: 'steel_45',
+        faceWidthFactor: 10,
+      },
     },
     allCandidates: [],
     candidates: [],
     selectedCandidateIds: [],
-    sortBy: 'score',
+    sortBy: 'manufacturability',
     filterSelfLock: false,
     filterDirectionConflict: false,
+    filterOverweight: false,
     maxResults: 30,
   },
 
@@ -593,7 +607,12 @@ export const useGearStore = create<GearStore>((set, get) => ({
       set((st) => ({ reverseSearch: { ...st.reverseSearch, searchProgress: progress } }));
     });
 
-    const filtered = filterCandidates(results, s.reverseSearch.filterSelfLock, s.reverseSearch.filterDirectionConflict);
+    const filtered = filterCandidates(
+      results,
+      s.reverseSearch.filterSelfLock,
+      s.reverseSearch.filterDirectionConflict,
+      s.reverseSearch.filterOverweight
+    );
     const sorted = sortCandidates(filtered, s.reverseSearch.sortBy);
 
     set((st) => ({
@@ -613,7 +632,8 @@ export const useGearStore = create<GearStore>((set, get) => ({
       const filtered = filterCandidates(
         s.reverseSearch.allCandidates,
         s.reverseSearch.filterSelfLock,
-        s.reverseSearch.filterDirectionConflict
+        s.reverseSearch.filterDirectionConflict,
+        s.reverseSearch.filterOverweight
       );
       const sorted = sortCandidates(filtered, sortBy);
       return {
@@ -632,7 +652,8 @@ export const useGearStore = create<GearStore>((set, get) => ({
       const filtered = filterCandidates(
         s.reverseSearch.allCandidates,
         newFilters.filterSelfLock,
-        newFilters.filterDirectionConflict
+        newFilters.filterDirectionConflict,
+        newFilters.filterOverweight
       );
       const sorted = sortCandidates(filtered, s.reverseSearch.sortBy);
       return {
