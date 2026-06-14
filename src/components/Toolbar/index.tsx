@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { ActionIcon, Group, SegmentedControl, Text, Tooltip, Menu, TextInput, Modal, NumberInput, Badge, Stack, ScrollArea, Divider } from '@mantine/core';
+import { ActionIcon, Group, SegmentedControl, Text, Tooltip, TextInput, Modal, NumberInput, Badge, Stack, ScrollArea, Divider } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
   FilePlus,
@@ -17,9 +17,11 @@ import {
   XCircle,
   AlertCircle,
   Link2,
+  Wand2,
 } from 'lucide-react';
 import { useGearStore } from '@/store/useGearStore';
 import { formatTime } from '@/lib/utils';
+import ReverseSearchPanel from '@/components/ReverseSearchPanel';
 
 const TIME_SCALES = [
   { label: '1x', value: '1' },
@@ -50,6 +52,8 @@ export default function Toolbar() {
   const getChainRecommendations = useGearStore((s) => s.getChainRecommendations);
   const chainRecommendations = useGearStore((s) => s.chainRecommendations);
   const applyChainRecommendation = useGearStore((s) => s.applyChainRecommendation);
+  const setReverseSearchOpen = useGearStore((s) => s.setReverseSearchOpen);
+  const reverseCandidates = useGearStore((s) => s.reverseSearch.candidates);
 
   const [saveOpened, { open: openSave, close: closeSave }] = useDisclosure(false);
   const [loadOpened, { open: openLoad, close: closeLoad }] = useDisclosure(false);
@@ -190,6 +194,32 @@ export default function Toolbar() {
           <ActionIcon variant="subtle" color="cyan" onClick={handleOpenRecommend}>
             <Sparkles size={18} />
           </ActionIcon>
+        </Tooltip>
+
+        <Tooltip label="天球目标反推排齿">
+          <div style={{ position: 'relative' }}>
+            <ActionIcon variant="subtle" color="violet" onClick={() => setReverseSearchOpen(true)}>
+              <Wand2 size={18} />
+            </ActionIcon>
+            {reverseCandidates.length > 0 && (
+              <Badge
+                size="xs"
+                color="violet"
+                variant="filled"
+                style={{
+                  position: 'absolute',
+                  top: -4,
+                  right: -4,
+                  minWidth: 16,
+                  height: 16,
+                  padding: '0 4px',
+                  fontSize: 9,
+                }}
+              >
+                {reverseCandidates.length}
+              </Badge>
+            )}
+          </div>
         </Tooltip>
 
         <Tooltip label="查看完整冲突清单">
@@ -341,6 +371,8 @@ export default function Toolbar() {
           </Stack>
         )}
       </Modal>
+
+      <ReverseSearchPanel />
     </>
   );
 }

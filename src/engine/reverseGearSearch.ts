@@ -44,17 +44,6 @@ export function ratioToPeriodDays(
   return SECONDS_PER_DAY / (outputRpm * 60);
 }
 
-function gcd(a: number, b: number): number {
-  a = Math.abs(Math.round(a));
-  b = Math.abs(Math.round(b));
-  while (b !== 0) {
-    const t = b;
-    b = a % b;
-    a = t;
-  }
-  return a;
-}
-
 function continuedFraction(x: number, maxIter: number = 20): number[] {
   const coeffs: number[] = [];
   let remaining = x;
@@ -133,12 +122,6 @@ function findBestSingleStageRatio(
   }
 
   return best;
-}
-
-interface MultiStageSearchState {
-  stages: GearStage[];
-  currentRatio: number;
-  usedTeeth: Set<string>;
 }
 
 export function searchGearStages(
@@ -281,7 +264,6 @@ function buildSchemeLayout(
   const meshes: MeshRelation[] = [];
 
   let gearIndex = 0;
-  let shaftIndex = 0;
   let xPos = 150;
   const yCenter = 250;
 
@@ -293,7 +275,6 @@ function buildSchemeLayout(
     y: yCenter,
   };
   shafts.push(firstShaft);
-  shaftIndex++;
 
   const driverGearId = uuidv4();
   const driverGear: Gear = {
@@ -313,7 +294,6 @@ function buildSchemeLayout(
   gearIndex++;
 
   let prevGearId = driverGearId;
-  let prevShaftId = firstShaftId;
   let prevTeeth = stages[0].driverTeeth;
 
   for (let i = 0; i < stages.length; i++) {
@@ -330,7 +310,6 @@ function buildSchemeLayout(
       y: yCenter,
     };
     shafts.push(nextShaft);
-    shaftIndex++;
 
     const drivenGearId = uuidv4();
     const isLast = i === stages.length - 1;
@@ -378,7 +357,6 @@ function buildSchemeLayout(
 
       prevGearId = compoundGearId;
       prevTeeth = nextStage.driverTeeth;
-      prevShaftId = nextShaftId;
     }
   }
 

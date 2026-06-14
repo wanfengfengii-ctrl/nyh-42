@@ -161,6 +161,7 @@ export interface ReverseSearchParams {
   preferFewerStages: boolean;
   preferSmallerSize: boolean;
   avoidSelfLock: boolean;
+  maxResults: number;
 }
 
 export interface GearStage {

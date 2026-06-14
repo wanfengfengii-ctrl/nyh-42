@@ -5,7 +5,6 @@ import type {
   GearType,
   MeshRelation,
   MeshType,
-  RotationDirection,
   Scheme,
   Shaft,
   ShaftGroup,
@@ -106,6 +105,15 @@ interface GearStore {
   deleteSavedScheme: (id: string) => void;
   setSchemeName: (name: string) => void;
   refreshSavedSchemes: () => void;
+
+  setReverseSearchOpen: (open: boolean) => void;
+  setReverseSearchParams: (params: Partial<ReverseSearchParams>) => void;
+  runReverseGearSearch: () => Promise<void>;
+  setReverseSearchSortBy: (sortBy: ReverseSearchState['sortBy']) => void;
+  setReverseSearchFilter: (filter: 'filterSelfLock' | 'filterDirectionConflict', value: boolean) => void;
+  toggleCandidateSelection: (candidateId: string) => void;
+  clearCandidateSelection: () => void;
+  applyCandidateScheme: (candidate: CandidateScheme) => void;
 }
 
 function recomputeShaftGroups(gears: Gear[], shafts: Shaft[]): ShaftGroup[] {
@@ -136,6 +144,31 @@ export const useGearStore = create<GearStore>((set, get) => ({
   conflictReport: null,
   chainRecommendations: [],
   activeSnapTarget: null,
+  reverseSearch: {
+    isOpen: false,
+    isSearching: false,
+    searchProgress: 0,
+    params: {
+      targetPeriodDays: 365.2422,
+      targetDirection: 'cw',
+      errorTolerancePercent: 1,
+      maxStages: 4,
+      minTeeth: 10,
+      maxTeeth: 120,
+      maxDiameter: 800,
+      driverSpeedRpm: 60,
+      preferFewerStages: true,
+      preferSmallerSize: false,
+      avoidSelfLock: true,
+      maxResults: 30,
+    },
+    candidates: [],
+    selectedCandidateIds: [],
+    sortBy: 'score',
+    filterSelfLock: false,
+    filterDirectionConflict: false,
+    maxResults: 30,
+  },
 
   addGear: (type, x, y) => {
     const state = get();
@@ -281,7 +314,7 @@ export const useGearStore = create<GearStore>((set, get) => ({
     set((s) => {
       const newGears = s.gears.map((g) => {
         if (g.id === gearId) {
-          const { shaftId, ...rest } = g;
+          const { shaftId: _shaftId, ...rest } = g;
           return rest;
         }
         return g;
@@ -533,5 +566,112 @@ export const useGearStore = create<GearStore>((set, get) => ({
 
   refreshSavedSchemes: () => {
     set({ savedSchemes: loadSchemes() });
+  },
+
+  setReverseSearchOpen: (open) => {
+    set((s) => ({ reverseSearch: { ...s.reverseSearch, isOpen: open } }));
+  },
+
+  setReverseSearchParams: (params) => {
+    set((s) => ({
+      reverseSearch: {
+        ...s.reverseSearch,
+        params: { ...s.reverseSearch.params, ...params },
+      },
+    }));
+  },
+
+  runReverseGearSearch: async () => {
+    const s = get();
+    set({ reverseSearch: { ...s.reverseSearch, isSearching: true, searchProgress: 0, candidates: [] } });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const results = runReverseSearch(s.reverseSearch.params, (progress) => {
+      set((st) => ({ reverseSearch: { ...st.reverseSearch, searchProgress: progress } }));
+    });
+
+    const filtered = filterCandidates(results, s.reverseSearch.filterSelfLock, s.reverseSearch.filterDirectionConflict);
+    const sorted = sortCandidates(filtered, s.reverseSearch.sortBy);
+
+    set((st) => ({
+      reverseSearch: {
+        ...st.reverseSearch,
+        isSearching: false,
+        searchProgress: 100,
+        candidates: sorted,
+        selectedCandidateIds: [],
+      },
+    }));
+  },
+
+  setReverseSearchSortBy: (sortBy) => {
+    set((s) => {
+      const sorted = sortCandidates(s.reverseSearch.candidates, sortBy);
+      return {
+        reverseSearch: {
+          ...s.reverseSearch,
+          sortBy,
+          candidates: sorted,
+        },
+      };
+    });
+  },
+
+  setReverseSearchFilter: (filter, value) => {
+    set((s) => {
+      const newFilters = { ...s.reverseSearch, [filter]: value };
+      const allCandidates = s.reverseSearch.candidates;
+      const filtered = filterCandidates(allCandidates, newFilters.filterSelfLock, newFilters.filterDirectionConflict);
+      const sorted = sortCandidates(filtered, s.reverseSearch.sortBy);
+      return {
+        reverseSearch: {
+          ...s.reverseSearch,
+          [filter]: value,
+          candidates: sorted,
+        },
+      };
+    });
+  },
+
+  toggleCandidateSelection: (candidateId) => {
+    set((s) => {
+      const selected = s.reverseSearch.selectedCandidateIds;
+      const newSelected = selected.includes(candidateId)
+        ? selected.filter((id) => id !== candidateId)
+        : [...selected, candidateId];
+      return {
+        reverseSearch: { ...s.reverseSearch, selectedCandidateIds: newSelected },
+      };
+    });
+  },
+
+  clearCandidateSelection: () => {
+    set((s) => ({ reverseSearch: { ...s.reverseSearch, selectedCandidateIds: [] } }));
+  },
+
+  applyCandidateScheme: (candidate) => {
+    const shaftGroups = computeShaftGroups(candidate.gears, candidate.shafts);
+    set({
+      gears: candidate.gears,
+      shafts: candidate.shafts,
+      meshes: candidate.meshes,
+      driverId: candidate.driverId,
+      driverSpeed: candidate.driverSpeed,
+      selectedGearId: null,
+      selectedMeshId: null,
+      isPlaying: false,
+      elapsedTime: 0,
+      isCreatingMesh: false,
+      meshSourceId: null,
+      schemeName: `反推方案 ${candidate.stageCount}级`,
+      currentSchemeId: null,
+      shaftGroups,
+      conflictReport: null,
+      chainRecommendations: [],
+      activeSnapTarget: null,
+      reverseSearch: { ...get().reverseSearch, isOpen: false },
+    });
+    get().validate();
   },
 }));
